@@ -1,0 +1,15 @@
+
+pandas
+numpy
+openpyxl
+matplotlib
+seaborn
+seaborn
+scikit-learn
+requests
+beautifulsoup4
+selenium
+jupyter
+ipykernel
+tqdm
+python-dotenv

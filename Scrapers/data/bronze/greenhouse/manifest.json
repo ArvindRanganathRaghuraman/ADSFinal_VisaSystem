@@ -1,0 +1,20 @@
+[
+  {
+    "run_date": "2026-04-01",
+    "scraped_at": "2026-04-01T16:24:16.163065+00:00",
+    "csv_path": "bronze/greenhouse/greenhouse_2026-04-01.csv",
+    "json_path": "bronze/greenhouse/greenhouse_2026-04-01.json",
+    "total_jobs": 2788,
+    "target_jobs": 90,
+    "companies_hit": 12
+  },
+  {
+    "run_date": "2026-04-01",
+    "scraped_at": "2026-04-01T16:28:48.850913+00:00",
+    "csv_path": "bronze/greenhouse/greenhouse_2026-04-01.csv",
+    "json_path": "bronze/greenhouse/greenhouse_2026-04-01.json",
+    "total_jobs": 1493,
+    "target_jobs": 60,
+    "companies_hit": 12
+  }
+]
