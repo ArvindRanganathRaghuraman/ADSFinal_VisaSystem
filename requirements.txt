@@ -1,15 +1,38 @@
-
+# ── Core data ──────────────────────────────────────────────────────────────────
 pandas
 numpy
-openpyxl
-matplotlib
-seaborn
-seaborn
-scikit-learn
+openpyxl          # read .xlsx files (PERM disclosure data)
+pyarrow           # parquet read/write (silver layer)
+
+# ── Web scraping ───────────────────────────────────────────────────────────────
 requests
 beautifulsoup4
 selenium
+
+# ── Visualisation ──────────────────────────────────────────────────────────────
+matplotlib
+seaborn
+
+# ── ML / similarity (future WS3–WS5) ──────────────────────────────────────────
+scikit-learn
+sentence-transformers   # semantic job matching (WS4)
+
+# ── LLM / agent orchestration (future WS3–WS6) ────────────────────────────────
+langchain
+langgraph
+openai              # or swap for anthropic sdk
+anthropic
+
+# ── API / backend (future WS7) ────────────────────────────────────────────────
+fastapi
+uvicorn[standard]
+python-multipart    # resume file upload
+
+# ── Utilities ─────────────────────────────────────────────────────────────────
+python-dotenv
+tqdm
+pydantic            # data models / validated schemas
+
+# ── Dev / notebooks ───────────────────────────────────────────────────────────
 jupyter
 ipykernel
-tqdm
-python-dotenv
