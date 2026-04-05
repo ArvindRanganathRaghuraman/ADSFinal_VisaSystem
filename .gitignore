@@ -5,6 +5,9 @@ pyproject.toml
 # Environment / secrets
 .env
 
+# Personal resumes — never commit
+Resumes/
+
 # Data outputs (large files)
 Scrapers/data/silver/
 Data/silver/
