@@ -16,5 +16,23 @@
     "total_jobs": 1493,
     "target_jobs": 60,
     "companies_hit": 12
+  },
+  {
+    "run_date": "2026-04-08",
+    "scraped_at": "2026-04-08T01:20:37.809756+00:00",
+    "csv_path": "bronze/greenhouse/greenhouse_2026-04-08.csv",
+    "json_path": "bronze/greenhouse/greenhouse_2026-04-08.json",
+    "total_jobs": 1473,
+    "target_jobs": 48,
+    "companies_hit": 12
+  },
+  {
+    "run_date": "2026-04-08",
+    "scraped_at": "2026-04-08T01:23:04.280601+00:00",
+    "csv_path": "bronze/greenhouse/greenhouse_2026-04-08.csv",
+    "json_path": "bronze/greenhouse/greenhouse_2026-04-08.json",
+    "total_jobs": 1473,
+    "target_jobs": 48,
+    "companies_hit": 12
   }
 ]
