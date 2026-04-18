@@ -1,7 +1,10 @@
 """
 Scrapers/Job_Scraping.py
 ------------------------
-Greenhouse ATS job scraper.
+Multi-ATS job scraper: Greenhouse, Lever, Ashby.
+
+To add a new company, edit Scrapers/companies.json — set its "ats" field to
+"greenhouse", "lever", or "ashby".
 
 Can be run directly:
     python Scrapers/Job_Scraping.py
@@ -16,7 +19,7 @@ import re
 import time
 from datetime import datetime, timezone
 from pathlib import Path
-from typing import Optional
+from typing import Callable
 
 import pandas as pd
 import requests
@@ -32,7 +35,6 @@ from Scrapers.config import (
 
 log = logging.getLogger(__name__)
 
-# ── Paths ──────────────────────────────────────────────────────────────────────
 BASE_DIR = Path(__file__).parent / "data"
 
 # ── US state lookup ────────────────────────────────────────────────────────────
@@ -46,7 +48,6 @@ US_STATES = {
     "oklahoma", "oregon", "pennsylvania", "rhode island", "south carolina",
     "south dakota", "tennessee", "texas", "utah", "vermont", "virginia",
     "washington", "west virginia", "wisconsin", "wyoming",
-    # abbreviations
     "al", "ak", "az", "ar", "ca", "co", "ct", "de", "fl", "ga", "hi", "id",
     "il", "in", "ia", "ks", "ky", "la", "me", "md", "ma", "mi", "mn", "ms",
     "mo", "mt", "ne", "nv", "nh", "nj", "nm", "ny", "nc", "nd", "oh", "ok",
@@ -55,7 +56,7 @@ US_STATES = {
 }
 
 
-# ── Helpers ────────────────────────────────────────────────────────────────────
+# ── Shared helpers ─────────────────────────────────────────────────────────────
 
 def clean_html(raw: str) -> str:
     soup = BeautifulSoup(raw or "", "html.parser")
@@ -82,30 +83,34 @@ def is_us_location(location: str) -> bool:
     return any(part in US_STATES for part in parts)
 
 
-# ── API ────────────────────────────────────────────────────────────────────────
-
-def fetch_jobs_for_company(slug: str) -> list[dict]:
-    url = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true"
+def _get(url: str, slug: str, **kwargs) -> requests.Response | None:
     try:
-        resp = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT)
+        resp = requests.get(url, headers=HEADERS, timeout=REQUEST_TIMEOUT, **kwargs)
         if resp.status_code == 404:
-            log.warning("[%s] No Greenhouse board found — skipping", slug)
-            return []
+            log.warning("[%s] 404 — board not found, skipping", slug)
+            return None
         resp.raise_for_status()
-        return resp.json().get("jobs", [])
+        return resp
     except requests.exceptions.RequestException as e:
         log.error("[%s] Request failed: %s", slug, e)
-        return []
+        return None
 
 
-def parse_job(raw: dict, company_slug: str, run_time: datetime) -> dict:
+# ── Greenhouse ─────────────────────────────────────────────────────────────────
+
+def fetch_greenhouse_jobs(slug: str) -> list[dict]:
+    url = f"https://boards-api.greenhouse.io/v1/boards/{slug}/jobs?content=true"
+    resp = _get(url, slug)
+    return resp.json().get("jobs", []) if resp else []
+
+
+def parse_greenhouse_job(raw: dict, slug: str, run_time: datetime) -> dict:
     loc = raw.get("location", {})
     location_str = loc.get("name", "") if isinstance(loc, dict) else str(loc)
     depts = [d.get("name", "") for d in raw.get("departments", [])]
-
     return {
         "job_id":           str(raw.get("id", "")),
-        "company_slug":     company_slug,
+        "company_slug":     slug,
         "title":            raw.get("title", ""),
         "is_target_role":   is_target_role(raw.get("title", "")),
         "location":         location_str,
@@ -120,6 +125,108 @@ def parse_job(raw: dict, company_slug: str, run_time: datetime) -> dict:
     }
 
 
+# ── Lever ──────────────────────────────────────────────────────────────────────
+
+def fetch_lever_jobs(slug: str) -> list[dict]:
+    url = f"https://api.lever.co/v0/postings/{slug}?mode=json"
+    resp = _get(url, slug)
+    if not resp:
+        return []
+    data = resp.json()
+    return data if isinstance(data, list) else []
+
+
+def parse_lever_job(raw: dict, slug: str, run_time: datetime) -> dict:
+    cats = raw.get("categories", {})
+    location_str = cats.get("location", "") or cats.get("allLocations", [""])[0] if isinstance(cats.get("allLocations"), list) else cats.get("location", "")
+    created_ms = raw.get("createdAt", 0)
+    posted_at = datetime.fromtimestamp(created_ms / 1000, tz=timezone.utc).isoformat() if created_ms else ""
+    html = raw.get("description", "") + "".join(
+        f"<h3>{lst.get('text','')}</h3><ul>{''.join(f'<li>{i}</li>' for i in lst.get('content',[]))}</ul>"
+        for lst in raw.get("lists", [])
+    )
+    return {
+        "job_id":           str(raw.get("id", "")),
+        "company_slug":     slug,
+        "title":            raw.get("text", ""),
+        "is_target_role":   is_target_role(raw.get("text", "")),
+        "location":         location_str,
+        "posted_at":        posted_at,
+        "scraped_at":       run_time.isoformat(),
+        "description_html": html,
+        "description_text": clean_html(html),
+        "departments":      cats.get("department", "") or cats.get("team", ""),
+        "apply_url":        raw.get("hostedUrl", ""),
+        "source_ats":       "lever",
+        "raw_json":         json.dumps(raw),
+    }
+
+
+# ── Ashby ──────────────────────────────────────────────────────────────────────
+
+def fetch_ashby_jobs(slug: str) -> list[dict]:
+    url = "https://api.ashbyhq.com/posting-public/job-board.list"
+    try:
+        resp = requests.post(
+            url,
+            json={"organizationHostedJobsPageName": slug},
+            headers=HEADERS,
+            timeout=REQUEST_TIMEOUT,
+        )
+        if resp.status_code == 404:
+            log.warning("[%s] 404 — Ashby board not found, skipping", slug)
+            return []
+        resp.raise_for_status()
+        data = resp.json()
+        return data.get("results", []) if data.get("success") else []
+    except requests.exceptions.RequestException as e:
+        log.error("[%s] Ashby request failed: %s", slug, e)
+        return []
+
+
+def parse_ashby_job(raw: dict, slug: str, run_time: datetime) -> dict:
+    dept = (raw.get("department") or {}).get("name", "")
+    team = (raw.get("team") or {}).get("name", "")
+    html = raw.get("descriptionHtml", "")
+    return {
+        "job_id":           str(raw.get("id", "")),
+        "company_slug":     slug,
+        "title":            raw.get("title", ""),
+        "is_target_role":   is_target_role(raw.get("title", "")),
+        "location":         raw.get("locationName", ""),
+        "posted_at":        raw.get("publishedDate", ""),
+        "scraped_at":       run_time.isoformat(),
+        "description_html": html,
+        "description_text": clean_html(html),
+        "departments":      dept or team,
+        "apply_url":        raw.get("applicationFormUrl", ""),
+        "source_ats":       "ashby",
+        "raw_json":         json.dumps(raw),
+    }
+
+
+# ── ATS dispatcher ─────────────────────────────────────────────────────────────
+
+_ATS_SCRAPERS: dict[str, tuple[Callable, Callable]] = {
+    "greenhouse": (fetch_greenhouse_jobs, parse_greenhouse_job),
+    "lever":      (fetch_lever_jobs,      parse_lever_job),
+    "ashby":      (fetch_ashby_jobs,      parse_ashby_job),
+}
+
+
+def scrape_company(slug: str, run_time: datetime) -> list[dict]:
+    for ats, (fetch_fn, parse_fn) in _ATS_SCRAPERS.items():
+        raw_jobs = fetch_fn(slug)
+        if raw_jobs:
+            parsed = [parse_fn(j, slug, run_time) for j in raw_jobs]
+            parsed = [p for p in parsed if is_us_location(p["location"])]
+            target_count = sum(1 for p in parsed if p["is_target_role"])
+            log.info("  [%s/%s] → %d US jobs | %d target-role", slug, ats, len(parsed), target_count)
+            return parsed
+    log.warning("  [%s] no jobs found on any platform", slug)
+    return []
+
+
 # ── Scraper ────────────────────────────────────────────────────────────────────
 
 def scrape_all(
@@ -127,10 +234,10 @@ def scrape_all(
     run_time: datetime | None = None,
 ) -> list[dict]:
     """
-    Scrape all companies and return a list of parsed job records.
+    Scrape all companies (across all ATS platforms) and return parsed job records.
 
     Args:
-        companies:  list of Greenhouse slugs; defaults to config.COMPANIES
+        companies:  list of company slugs; defaults to config.COMPANIES
         run_time:   UTC datetime stamped on each record; defaults to now
     """
     if companies is None:
@@ -138,15 +245,10 @@ def scrape_all(
     if run_time is None:
         run_time = datetime.now(timezone.utc)
 
-    all_records = []
+    all_records: list[dict] = []
     for slug in companies:
         log.info("Scraping [%s] ...", slug)
-        raw_jobs = fetch_jobs_for_company(slug)
-        parsed = [parse_job(j, slug, run_time) for j in raw_jobs]
-        parsed = [p for p in parsed if is_us_location(p["location"])]
-        target_count = sum(1 for p in parsed if p["is_target_role"])
-        log.info("  → %d US jobs  |  %d target-role jobs", len(parsed), target_count)
-        all_records.extend(parsed)
+        all_records.extend(scrape_company(slug, run_time))
         time.sleep(REQUEST_DELAY)
 
     return all_records
@@ -156,12 +258,12 @@ def scrape_all(
 
 def save_bronze(records: list[dict], run_time: datetime | None = None) -> None:
     """
-    Persist scraped records to the bronze layer.
+    Persist scraped records (all ATS combined) to the bronze layer.
 
     Writes:
-      bronze/greenhouse/greenhouse_YYYY-MM-DD.csv   (no raw_json / HTML)
-      bronze/greenhouse/greenhouse_YYYY-MM-DD.json  (full fidelity)
-      bronze/greenhouse/manifest.json               (run log)
+      bronze/jobs/jobs_YYYY-MM-DD.csv   (no raw_json / HTML)
+      bronze/jobs/jobs_YYYY-MM-DD.json  (full fidelity)
+      bronze/jobs/manifest.json         (run log)
     """
     if not records:
         log.warning("No records to save.")
@@ -171,28 +273,29 @@ def save_bronze(records: list[dict], run_time: datetime | None = None) -> None:
         run_time = datetime.now(timezone.utc)
 
     date_str = run_time.strftime("%Y-%m-%d")
-    bronze_dir = BASE_DIR / "bronze" / "greenhouse"
+    bronze_dir = BASE_DIR / "bronze" / "jobs"
     bronze_dir.mkdir(parents=True, exist_ok=True)
 
     df = pd.DataFrame(records)
 
-    csv_df = df.drop(columns=["raw_json", "description_html"], errors="ignore")
-    csv_path = bronze_dir / f"greenhouse_{date_str}.csv"
-    csv_df.to_csv(csv_path, index=False, encoding="utf-8-sig")
-    log.info("CSV  → %s  (%d rows)", csv_path, len(csv_df))
+    csv_path = bronze_dir / f"jobs_{date_str}.csv"
+    df.drop(columns=["raw_json", "description_html"], errors="ignore").to_csv(
+        csv_path, index=False, encoding="utf-8-sig"
+    )
+    log.info("CSV  → %s  (%d rows)", csv_path, len(df))
 
-    json_path = bronze_dir / f"greenhouse_{date_str}.json"
-    with open(json_path, "w") as f:
+    json_path = bronze_dir / f"jobs_{date_str}.json"
+    with open(json_path, "w", encoding="utf-8") as f:
         json.dump(records, f, indent=2, default=str)
     log.info("JSON → %s", json_path)
 
-    # Append to manifest
     manifest_path = bronze_dir / "manifest.json"
     manifest = []
     if manifest_path.exists():
-        with open(manifest_path) as f:
+        with open(manifest_path, encoding="utf-8") as f:
             manifest = json.load(f)
 
+    ats_counts = df.groupby("source_ats").size().to_dict()
     manifest.append({
         "run_date":       date_str,
         "scraped_at":     run_time.isoformat(),
@@ -201,9 +304,10 @@ def save_bronze(records: list[dict], run_time: datetime | None = None) -> None:
         "total_jobs":     len(df),
         "target_jobs":    int(df["is_target_role"].sum()),
         "companies_hit":  int(df["company_slug"].nunique()),
+        "by_ats":         ats_counts,
     })
 
-    with open(manifest_path, "w") as f:
+    with open(manifest_path, "w", encoding="utf-8") as f:
         json.dump(manifest, f, indent=2)
 
     log.info(
@@ -211,9 +315,10 @@ def save_bronze(records: list[dict], run_time: datetime | None = None) -> None:
         "  Total jobs   : %d\n"
         "  Target roles : %d\n"
         "  Companies    : %d\n"
+        "  By ATS       : %s\n"
         "  Output dir   : %s",
         date_str, len(df), int(df["is_target_role"].sum()),
-        df["company_slug"].nunique(), BASE_DIR,
+        df["company_slug"].nunique(), ats_counts, BASE_DIR,
     )
 
 

@@ -631,8 +631,8 @@ def _base_state(top_n: int, candidate_top_n: int, refresh: bool) -> dict:
 def run_pipeline(
     resume_path:     str | Path,
     user_inputs:     UserInputs,
-    top_n:           int  = 15,
-    candidate_top_n: int  = 50,
+    top_n:           int  = 30,
+    candidate_top_n: int  = 150,
     refresh:         bool = False,
 ) -> list[ScoredJob]:
     """
@@ -651,8 +651,8 @@ def run_pipeline(
 def run_pipeline_from_profile(
     profile:         CandidateProfile,
     user_inputs:     UserInputs,
-    top_n:           int  = 15,
-    candidate_top_n: int  = 50,
+    top_n:           int  = 30,
+    candidate_top_n: int  = 150,
     refresh:         bool = False,
 ) -> list[ScoredJob]:
     """

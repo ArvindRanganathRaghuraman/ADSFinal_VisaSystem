@@ -1,48 +1,22 @@
 # ── Scraper Configuration ──────────────────────────────────────────────────────
-# Edit this file to add companies, keywords, or tune request settings.
+# To add or remove companies, edit Scrapers/companies.json — no Python changes needed.
+
+import json
+from pathlib import Path
 
 # Role keywords used to flag "target" jobs in the scraped data.
 # Matching is case-insensitive substring match on job title.
 TARGET_KEYWORDS = {"data engineer", "data analyst", "data scientist"}
 
-# Greenhouse ATS board slugs for companies to scrape.
-# Add more slugs here — Greenhouse API requires no auth.
-COMPANIES = [
-    "stripe",
-    "airbnb",
-    "lyft",
-    "pinterest",
-    "robinhood",
-    "coinbase",
-    "databricks",
-    "snowflake",
-    "figma",
-    "notion",
-    "airtable",
-    "brex",
-    "rippling",
-    "gusto",
-    "lattice",
-]
+# Load companies from the companion JSON file
+_COMPANIES_FILE = Path(__file__).parent / "companies.json"
+_company_list: list[dict] = json.loads(_COMPANIES_FILE.read_text(encoding="utf-8"))
+
+# All company slugs — derived from companies.json
+COMPANIES: list[str] = [c["slug"] for c in _company_list]
 
 # Human-readable canonical names for each slug (used for display + PERM matching)
-COMPANY_DISPLAY_NAMES = {
-    "stripe":      "Stripe",
-    "airbnb":      "Airbnb",
-    "lyft":        "Lyft",
-    "pinterest":   "Pinterest",
-    "robinhood":   "Robinhood",
-    "coinbase":    "Coinbase",
-    "databricks":  "Databricks",
-    "snowflake":   "Snowflake",
-    "figma":       "Figma",
-    "notion":      "Notion",
-    "airtable":    "Airtable",
-    "brex":        "Brex",
-    "rippling":    "Rippling",
-    "gusto":       "Gusto",
-    "lattice":     "Lattice",
-}
+COMPANY_DISPLAY_NAMES: dict[str, str] = {c["slug"]: c["display_name"] for c in _company_list}
 
 # HTTP settings
 REQUEST_DELAY   = 1.2   # seconds between requests per company

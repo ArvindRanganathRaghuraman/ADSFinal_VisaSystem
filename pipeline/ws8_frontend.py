@@ -239,8 +239,8 @@ with st.sidebar:
     top_n = st.slider(
         "Top results to show",
         min_value = 5,
-        max_value = 50,
-        value     = 15,
+        max_value = 100,
+        value     = 30,
         step      = 5,
     )
 
@@ -381,7 +381,7 @@ n_neg     = sum(1 for j in results if (j.get("sponsorship_signal") or "").lower(
 avg_score = sum(j.get("final_score", 0) for j in results) / max(len(results), 1)
 
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Total matches",       total)
+m1.metric("Total matches",       len(results))
 m2.metric("Avg final score",     f"{avg_score:.2f}")
 if req_spons:
     m3.metric("Likely sponsors",  n_high)

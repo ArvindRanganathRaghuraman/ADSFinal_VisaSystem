@@ -249,7 +249,7 @@ async def analyze(
                               description="Comma-separated list of preferred locations",
                           ),
     open_to_relocation:   bool       = Form(default=True),
-    top_n:                int        = Form(default=15, ge=1, le=50),
+    top_n:                int        = Form(default=30, ge=1, le=100),
 ):
     """
     Upload a resume (PDF or DOCX) with your job preferences.

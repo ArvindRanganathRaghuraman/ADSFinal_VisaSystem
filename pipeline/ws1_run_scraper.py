@@ -36,7 +36,7 @@ from Scrapers.config import COMPANIES
 log = logging.getLogger(__name__)
 
 # ── Paths ──────────────────────────────────────────────────────────────────────
-BRONZE_DIR       = _ROOT / "Scrapers" / "data" / "bronze" / "greenhouse"
+BRONZE_DIR       = _ROOT / "Scrapers" / "data" / "bronze" / "jobs"
 SILVER_DIR       = _ROOT / "Scrapers" / "data" / "silver"
 SILVER_PARQUET   = SILVER_DIR / "jobs_all.parquet"
 SILVER_CSV       = SILVER_DIR / "jobs_all.csv"
@@ -54,7 +54,7 @@ def build_silver() -> pd.DataFrame:
     """
     all_records: list[dict] = []
 
-    json_files = sorted(BRONZE_DIR.glob("greenhouse_*.json"))
+    json_files = sorted(BRONZE_DIR.glob("jobs_*.json"))
     if not json_files:
         log.warning("No bronze JSON files found in %s", BRONZE_DIR)
         return pd.DataFrame()
