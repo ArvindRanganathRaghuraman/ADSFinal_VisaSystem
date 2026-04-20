@@ -417,8 +417,10 @@ def run() -> None:
     # Merge PERM + USCIS on normalised name
     combined = perm_agg.merge(uscis_agg, on="company_name_norm", how="outer")
 
-    # Fill missing USCIS columns for PERM-only companies
-    for col in ("uscis_total_approvals", "uscis_total_denials"):
+    # Fill missing columns for companies present in only one source
+    for col in ("uscis_total_approvals", "uscis_total_denials",
+                "total_perm_certified", "total_perm_denied",
+                "recent_perm_certified", "recent_perm_denied"):
         combined[col] = combined[col].fillna(0).astype(int)
 
     # Final sort — highest total certified first
@@ -453,12 +455,14 @@ def _spot_check(df: pd.DataFrame) -> None:
             log.info("  %-15s → NOT FOUND in PERM/USCIS data", display)
         else:
             row = match.iloc[0]
+            certified = row.get("total_perm_certified", 0)
+            freshness = row.get("data_freshness_score", 0)
             log.info(
                 "  %-15s → certified=%d  trend=%-20s  freshness=%.2f",
                 display,
-                int(row.get("total_perm_certified", 0) or 0),
+                int(certified) if not pd.isna(certified) else 0,
                 str(row.get("trend_direction", "?")),
-                float(row.get("data_freshness_score", 0) or 0),
+                float(freshness) if not pd.isna(freshness) else 0.0,
             )
 
 

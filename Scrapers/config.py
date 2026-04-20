@@ -18,6 +18,11 @@ COMPANIES: list[str] = [c["slug"] for c in _company_list]
 # Human-readable canonical names for each slug (used for display + PERM matching)
 COMPANY_DISPLAY_NAMES: dict[str, str] = {c["slug"]: c["display_name"] for c in _company_list}
 
+# Known ATS platform per slug — used to skip blind trial-and-error scraping
+COMPANY_ATS: dict[str, str] = {
+    c["slug"]: c["ats"] for c in _company_list if "ats" in c
+}
+
 # HTTP settings
 REQUEST_DELAY   = 1.2   # seconds between requests per company
 REQUEST_TIMEOUT = 15    # seconds per HTTP call

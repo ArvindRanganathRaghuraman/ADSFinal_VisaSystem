@@ -27,6 +27,7 @@ from bs4 import BeautifulSoup
 
 from Scrapers.config import (
     COMPANIES,
+    COMPANY_ATS,
     HEADERS,
     REQUEST_DELAY,
     REQUEST_TIMEOUT,
@@ -205,17 +206,103 @@ def parse_ashby_job(raw: dict, slug: str, run_time: datetime) -> dict:
     }
 
 
+# ── SmartRecruiters ────────────────────────────────────────────────────────────
+
+def fetch_smartrecruiters_jobs(slug: str) -> list[dict]:
+    url = f"https://api.smartrecruiters.com/v1/companies/{slug}/postings"
+    resp = _get(url, slug, params={"limit": 100})
+    if not resp:
+        return []
+    data = resp.json()
+    return data.get("content", [])
+
+
+def parse_smartrecruiters_job(raw: dict, slug: str, run_time: datetime) -> dict:
+    loc = raw.get("location", {})
+    location_str = ", ".join(filter(None, [
+        loc.get("city", ""), loc.get("region", ""), loc.get("country", "")
+    ]))
+    dept = (raw.get("department") or {}).get("label", "")
+    return {
+        "job_id":           str(raw.get("id", "")),
+        "company_slug":     slug,
+        "title":            raw.get("name", ""),
+        "is_target_role":   is_target_role(raw.get("name", "")),
+        "location":         location_str,
+        "posted_at":        raw.get("releasedDate", ""),
+        "scraped_at":       run_time.isoformat(),
+        "description_html": "",
+        "description_text": "",
+        "departments":      dept,
+        "apply_url":        raw.get("ref", ""),
+        "source_ats":       "smartrecruiters",
+        "raw_json":         json.dumps(raw),
+    }
+
+
+# ── Workable ───────────────────────────────────────────────────────────────────
+
+def fetch_workable_jobs(slug: str) -> list[dict]:
+    url = f"https://apply.workable.com/api/v3/accounts/{slug}/jobs"
+    try:
+        resp = requests.post(
+            url,
+            json={"limit": 50, "details": False},
+            headers=HEADERS,
+            timeout=REQUEST_TIMEOUT,
+        )
+        if resp.status_code == 404:
+            log.warning("[%s] 404 — Workable board not found, skipping", slug)
+            return []
+        resp.raise_for_status()
+        return resp.json().get("results", [])
+    except requests.exceptions.RequestException as e:
+        log.error("[%s] Workable request failed: %s", slug, e)
+        return []
+
+
+def parse_workable_job(raw: dict, slug: str, run_time: datetime) -> dict:
+    loc = raw.get("location", {})
+    location_str = ", ".join(filter(None, [
+        loc.get("city", ""), loc.get("region", ""), loc.get("country", "")
+    ]))
+    return {
+        "job_id":           str(raw.get("shortcode", raw.get("id", ""))),
+        "company_slug":     slug,
+        "title":            raw.get("title", ""),
+        "is_target_role":   is_target_role(raw.get("title", "")),
+        "location":         location_str,
+        "posted_at":        raw.get("published_on", ""),
+        "scraped_at":       run_time.isoformat(),
+        "description_html": "",
+        "description_text": "",
+        "departments":      raw.get("department", ""),
+        "apply_url":        raw.get("url", ""),
+        "source_ats":       "workable",
+        "raw_json":         json.dumps(raw),
+    }
+
+
 # ── ATS dispatcher ─────────────────────────────────────────────────────────────
 
 _ATS_SCRAPERS: dict[str, tuple[Callable, Callable]] = {
-    "greenhouse": (fetch_greenhouse_jobs, parse_greenhouse_job),
-    "lever":      (fetch_lever_jobs,      parse_lever_job),
-    "ashby":      (fetch_ashby_jobs,      parse_ashby_job),
+    "greenhouse":      (fetch_greenhouse_jobs,      parse_greenhouse_job),
+    "lever":           (fetch_lever_jobs,           parse_lever_job),
+    "ashby":           (fetch_ashby_jobs,           parse_ashby_job),
+    "smartrecruiters": (fetch_smartrecruiters_jobs, parse_smartrecruiters_job),
+    "workable":        (fetch_workable_jobs,         parse_workable_job),
 }
 
 
 def scrape_company(slug: str, run_time: datetime) -> list[dict]:
-    for ats, (fetch_fn, parse_fn) in _ATS_SCRAPERS.items():
+    known_ats = COMPANY_ATS.get(slug)
+    platforms = (
+        [(known_ats, _ATS_SCRAPERS[known_ats])]
+        if known_ats and known_ats in _ATS_SCRAPERS
+        else list(_ATS_SCRAPERS.items())
+    )
+
+    for ats, (fetch_fn, parse_fn) in platforms:
         raw_jobs = fetch_fn(slug)
         if raw_jobs:
             parsed = [parse_fn(j, slug, run_time) for j in raw_jobs]
@@ -223,6 +310,7 @@ def scrape_company(slug: str, run_time: datetime) -> list[dict]:
             target_count = sum(1 for p in parsed if p["is_target_role"])
             log.info("  [%s/%s] → %d US jobs | %d target-role", slug, ats, len(parsed), target_count)
             return parsed
+
     log.warning("  [%s] no jobs found on any platform", slug)
     return []
 

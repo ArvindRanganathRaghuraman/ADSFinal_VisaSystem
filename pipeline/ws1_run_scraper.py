@@ -1,10 +1,11 @@
 """
 pipeline/ws1_run_scraper.py
 ---------------------------
-WS1: Daily Greenhouse scraper pipeline.
+WS1: Daily multi-ATS job scraper pipeline (Greenhouse, Lever, Ashby).
 
 Steps:
-  1. Scrape Greenhouse → bronze layer (date-stamped JSON + CSV per run)
+  1. Scrape all configured companies across ATS platforms → bronze layer
+     (date-stamped JSON + CSV per run)
   2. Merge all bronze JSON files → silver layer (deduplicated parquet/CSV)
      - Deduplicates by job_id (keeps the most-recent scrape record)
      - Tracks first_seen / last_seen / times_seen per job
@@ -130,7 +131,7 @@ def run() -> None:
     run_time = datetime.now(timezone.utc)
 
     # Step 1 — scrape → bronze
-    log.info("Step 1/2: Scraping Greenhouse (%d companies)...", len(COMPANIES))
+    log.info("Step 1/2: Scraping %d companies (Greenhouse / Lever / Ashby)...", len(COMPANIES))
     records = scrape_all(companies=COMPANIES, run_time=run_time)
     save_bronze(records, run_time=run_time)
 
