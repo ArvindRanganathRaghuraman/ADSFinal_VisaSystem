@@ -18,6 +18,7 @@ Run
 """
 
 import io
+import textwrap
 import time
 
 import requests
@@ -95,17 +96,21 @@ def _visa_badge(signal: str, confidence: float | None, requires: bool) -> str:
     pct = f"{confidence * 100:.0f}%"
     sig = signal.lower()
 
-    if sig in ("positive", "likely_positive"):
-        label = "Likely Sponsors"
-        cls   = "badge-high" if sig == "positive" else "badge-likely"
-    elif sig in ("negative", "likely_negative"):
-        label = "May Not Sponsor"
-        cls   = "badge-neg"
-    else:
-        label = "Sponsorship Unknown"
-        cls   = "badge-unknown"
+    if sig == "positive":
+        return f'<span class="badge badge-high">✅ JD Confirms Sponsorship ({pct})</span>'
+    if sig == "likely_positive":
+        return f'<span class="badge badge-likely">🟢 JD Suggests Sponsorship ({pct})</span>'
+    if sig == "negative":
+        return f'<span class="badge badge-neg">❌ JD: No Sponsorship ({pct})</span>'
+    if sig == "likely_negative":
+        return f'<span class="badge badge-neg">⚠️ JD: Auth Required ({pct})</span>'
 
-    return f'<span class="badge {cls}">{label} ({pct})</span>'
+    # JD silent — use PERM confidence to set the label
+    if confidence >= 0.65:
+        return f'<span class="badge badge-likely">📊 Likely (PERM history, {pct})</span>'
+    if confidence >= 0.45:
+        return f'<span class="badge badge-unknown">📊 Uncertain (PERM history, {pct})</span>'
+    return f'<span class="badge badge-neg">📊 Unlikely (PERM history, {pct})</span>'
 
 
 def _score_color(score: float) -> str:
@@ -467,38 +472,37 @@ for idx, job in enumerate(filtered, start=1):
     posted_str = f"{days_ago}d ago" if days_ago >= 0 else "date unknown"
 
     with st.container():
-        st.markdown(
-            f"""
-            <div class="job-card">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                    <div>
-                        <span style="font-size:1.12rem; font-weight:700;">{idx}. {title}</span>
-                        &nbsp;&nbsp;
-                        <span style="color:#555; font-size:0.95rem;">{company}</span>
-                    </div>
-                    <div style="text-align:right; font-size:0.85rem; color:#777;">
-                        {em} <strong>{final:.2f}</strong>&nbsp;final score
-                    </div>
-                </div>
-                <div style="font-size:0.85rem; color:#666; margin:4px 0 8px;">
-                    📍 {location} &nbsp;·&nbsp; 🕐 Posted {posted_str}
-                    {"&nbsp;·&nbsp; ✅ Target role" if role_ok else ""}
-                    {"&nbsp;·&nbsp; 📌 Location match" if loc_ok else ""}
-                </div>
-                <div style="margin-bottom:8px;">
-                    {badge_html}
-                    <span class="badge" style="background:#f0f0f0;color:#333;">
-                        Match {match*100:.0f}%
-                    </span>
-                    <span class="badge" style="background:#f0f0f0;color:#333;">
-                        Recency {recency*100:.0f}%
-                    </span>
-                    {f'<span class="badge" style="background:#f0f0f0;color:#333;">PERM {perm_cnt} filings {trend_ico}</span>' if req_spons and perm_cnt else ""}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        perm_badge = (
+            f'<span class="badge" style="background:#f0f0f0;color:#333;">PERM {perm_cnt} filings {trend_ico}</span>'
+            if req_spons and perm_cnt else ""
         )
+        card_html = textwrap.dedent(f"""
+<a href="{apply}" target="_blank" style="text-decoration:none; color:inherit; display:block;">
+<div class="job-card" style="cursor:pointer; transition:box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,0.12)'" onmouseout="this.style.boxShadow='none'">
+<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+<div style="flex:1; min-width:0;">
+<div style="font-size:1.15rem; font-weight:700; color:#1a1a1a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{company}</div>
+<div style="font-size:0.97rem; color:#333; margin-top:3px;">{title}</div>
+</div>
+<div style="text-align:right; font-size:0.85rem; color:#777; white-space:nowrap; flex-shrink:0;">
+{em} <strong>{final:.2f}</strong> final score
+</div>
+</div>
+<div style="font-size:0.82rem; color:#666; margin:6px 0 10px;">
+📍 {location} &nbsp;·&nbsp; 🕐 Posted {posted_str}
+{"&nbsp;·&nbsp; ✅ Target role" if role_ok else ""}
+{"&nbsp;·&nbsp; 📌 Location match" if loc_ok else ""}
+</div>
+<div>
+{badge_html}
+<span class="badge" style="background:#f0f0f0;color:#333;">Match {match*100:.0f}%</span>
+<span class="badge" style="background:#f0f0f0;color:#333;">Recency {recency*100:.0f}%</span>
+{perm_badge}
+</div>
+</div>
+</a>
+        """).strip()
+        st.markdown(card_html, unsafe_allow_html=True)
 
         # Expandable detail panel
         with st.expander("Details & Reasoning"):

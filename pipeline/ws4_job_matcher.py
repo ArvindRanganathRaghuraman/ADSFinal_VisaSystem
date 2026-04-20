@@ -66,6 +66,27 @@ W_LOCATION  = 0.10
 # Only embed the first N chars of each description (speed + context quality)
 DESC_CHARS = 1500
 
+# Seniority rank mapping (higher = more senior)
+_CANDIDATE_RANK = {"Entry": 1, "Mid": 2, "Senior": 3, "Staff": 4, "Principal": 5}
+_JOB_TITLE_SENIORITY = [
+    (re.compile(r'\b(principal|distinguished|fellow)\b', re.I), 5),
+    (re.compile(r'\b(staff)\b', re.I),                          4),
+    (re.compile(r'\b(senior|sr\.?|lead)\b', re.I),              3),
+    (re.compile(r'\b(junior|jr\.?|associate|entry|intern)\b', re.I), 1),
+]
+
+# Known role → title pattern. Used to filter out jobs that clearly belong to a
+# role the user did NOT select.
+_KNOWN_ROLE_PATTERNS: dict[str, re.Pattern] = {
+    "Data Engineer":      re.compile(r'\bdata\s+engineer(ing)?\b', re.I),
+    "Data Scientist":     re.compile(r'\bdata\s+scien(tist|ce)\b', re.I),
+    "Data Analyst":       re.compile(r'\bdata\s+analyst\b', re.I),
+    "Analytics Engineer": re.compile(r'\banalytics\s+engineer\b', re.I),
+    "ML Engineer":        re.compile(r'\b(machine\s+learning|ml)\s+engineer\b', re.I),
+    "Software Engineer":  re.compile(r'\bsoftware\s+engineer\b', re.I),
+    "Backend Engineer":   re.compile(r'\bbackend\s+engineer\b', re.I),
+}
+
 
 # ── Helpers ───────────────────────────────────────────────────────────────────
 
@@ -123,6 +144,36 @@ def _role_match(job_title: str, target_roles: list[str]) -> bool:
         if any(kw in title_lower for kw in keywords):
             return True
     return False
+
+
+def _is_off_target_role(job_title: str, target_roles: list[str]) -> bool:
+    """
+    Returns True if the job title clearly matches a known role that the user
+    did NOT include in their target list. Jobs with ambiguous or unrecognised
+    titles are always allowed through.
+    """
+    if not target_roles:
+        return False
+    for role, pattern in _KNOWN_ROLE_PATTERNS.items():
+        if pattern.search(job_title) and role not in target_roles:
+            return True
+    return False
+
+
+def _seniority_gap(job_title: str, candidate_seniority: str | None) -> int:
+    """
+    Returns how many seniority levels the job is above the candidate.
+    Negative means candidate is overqualified. 0/1 = acceptable.
+    """
+    if not candidate_seniority:
+        return 0
+    candidate_rank = _CANDIDATE_RANK.get(candidate_seniority, 2)
+    job_rank = 2  # default: unspecified title treated as mid-level
+    for pattern, rank in _JOB_TITLE_SENIORITY:
+        if pattern.search(job_title):
+            job_rank = rank
+            break
+    return job_rank - candidate_rank
 
 
 def _location_match(job_location: str, preferred: list[str]) -> bool:
@@ -233,17 +284,28 @@ def match(
     results: list[JobMatch] = []
     for i, row in job_index.iterrows():
         desc   = str(row.get("description_clean", ""))
+        gap    = _seniority_gap(row["title"], profile.seniority_level)
+
+        # Hard filter: skip jobs that are 2+ levels above the candidate
+        if gap >= 2:
+            continue
+
         sem    = float(semantic_scores[i])
         skill_score, matched = _skill_overlap(profile.technical_skills, desc)
         role   = _role_match(row["title"], profile.target_roles or profile.best_fit_roles)
         loc    = _location_match(row["location"], profile.preferred_locations)
 
-        final = (
+        sen_penalty  = 0.08 if gap == 1 else 0.0
+        role_penalty = 0.15 if _is_off_target_role(row["title"], profile.target_roles or []) else 0.0
+
+        final = max(0.0, (
             W_SEMANTIC * sem
             + W_SKILL   * skill_score
             + W_ROLE    * (1.0 if role else 0.0)
             + W_LOCATION * (1.0 if loc else 0.0)
-        )
+            - sen_penalty
+            - role_penalty
+        ))
 
         results.append(JobMatch(
             job_id           = str(row["job_id"]),
