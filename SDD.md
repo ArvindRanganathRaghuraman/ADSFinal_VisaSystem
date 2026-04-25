@@ -33,10 +33,39 @@ The system answers: *"Strong PERM history through 2022, but filings have dropped
 
 ---
 
-## 2. ARCHITECTURE PRINCIPLES
+## 2. WHAT MAKES THIS DIFFERENT
+
+Most tools in this space attempt to answer one question: *does this company sponsor?* They return a yes, a no, or a list of past filings. The failure mode is well-documented — a company that sponsored 600 roles in 2021 and zero in 2024 will still appear as a "known sponsor" on every static database that exists today.
+
+**Clock's Ticking is not a lookup tool. It is a computational skepticism engine.**
+
+The distinction is architectural. Rather than returning the most likely answer, it returns a calibrated confidence score backed by explicit, timestamped evidence — and when that evidence is thin, stale, or contradictory, it says so rather than resolving the ambiguity into a clean number that feels trustworthy but isn't.
+
+### What Humans Do vs. What the System Does
+
+This system is designed around strategic delegation. There are things humans are better at and things machines are better at — and mixing them up wastes both.
+
+| Human (the candidate) | System (the agents) |
+|---|---|
+| Provides resume, career preferences, risk tolerance | Ingests 40 ATS feeds daily across three platforms |
+| Interprets results and makes the final apply decision | Normalizes 5 years of DOL PERM filings into per-company trends |
+| Weighs factors the system cannot see (recruiter relationship, culture fit) | Extracts sponsorship signals from job description text at scale |
+| Reviews flagged contradictions and adjusts their strategy | Detects when a company's historical pattern no longer matches its current postings |
+
+The agents handle the parts that require scale and systematic skepticism. The candidate handles the parts that require judgment. Neither substitutes for the other.
+
+### Why Calibration Matters More Than Accuracy
+
+A system that is right 80% of the time but presents every answer with 100% confidence is actively dangerous in this domain. International students cannot absorb the cost of the 20% that's wrong.
+
+**Clock's Ticking is evaluated on calibration, not classification accuracy.** When the system reports 80% visa confidence, approximately 80% of those companies should actually offer sponsorship. When evidence is ambiguous, the score drops to reflect that ambiguity — even if that means showing the candidate a list of "low-confidence" results they still need to investigate manually. An honest low-confidence score is more valuable than a confident wrong answer.
+
+---
+
+## 3. ARCHITECTURE PRINCIPLES
 
 ### P1 — Data Provenance Over Inference
-Every sponsorship confidence score must trace back to a primary source (DOL PERM filing, USCIS petition record, or explicit JD language). No sponsorship claim is synthesized without a labeled source. A score without a documented source is a liability, not a feature.
+Every sponsorship confidence score must trace back to a primary source (DOL PERM filing, USCIS petition record, or explicit JD language). No sponsorship claim is synthesized without a labeled source. A score without a documented source is a confident guess — exactly the failure mode this system was built to replace.
 
 - **Honors**: Storing `perm_by_year`, `uscis_total_approvals`, `sponsorship_signal` as separate, traceable fields.
 - **Violates**: Generating a combined "sponsorship probability" from an ML model with no audit trail.
@@ -63,11 +92,18 @@ Raw scraped data (bronze) is never mutated. Derived/cleaned data (silver) is reb
 - **Violates**: Modifying a bronze record in place to "fix" a scraping error.
 - **Failure state**: A silver rebuild produces different results than expected because bronze was patched inconsistently. Debugging becomes archaeological.
 
+### P5 — Skepticism Over Prediction
+The system does not answer "does this company sponsor?" It answers "how much should you trust the available evidence, and what would change that trust?" When evidence is strong and consistent, confidence is high. When evidence is stale, contradictory, or thin, the system says so — explicitly, in the reasoning string — rather than resolving the ambiguity silently into a clean number.
+
+- **Honors**: Trend-adjusted PERM scoring; JD signal cascade that penalizes exclusionary language even when historical filings are strong; `data_freshness_score` discount that prevents old filings from masquerading as current policy.
+- **Violates**: Returning a high `visa_confidence` for a company whose most recent PERM filing is four years old, without any freshness penalty.
+- **Failure state**: The system produces a confident, well-formatted, incorrect answer. The student applies. The recruiter says no sponsorship after four rounds. Six weeks gone.
+
 ---
 
-## 3. CORE USER FLOWS + SYSTEM INTERACTION MAP
+## 4. CORE USER FLOWS + SYSTEM INTERACTION MAP
 
-### 3.1 PRIMARY FLOW — Resume Upload → Ranked Results
+### 4.1 PRIMARY FLOW — Resume Upload → Ranked Results
 
 ```
 1. User opens Streamlit UI (ws8)
@@ -116,7 +152,7 @@ Raw scraped data (bronze) is never mutated. Derived/cleaned data (silver) is reb
 
 ---
 
-### 3.2 INTEGRATION FLOW — System to System
+### 4.2 INTEGRATION FLOW — System to System
 
 | External System         | Protocol       | Data Exchanged                         | Failure Owner      |
 |-------------------------|----------------|----------------------------------------|--------------------|
@@ -129,7 +165,7 @@ Raw scraped data (bronze) is never mutated. Derived/cleaned data (silver) is reb
 
 ---
 
-### 3.3 ADMINISTRATIVE FLOW — Operator Path
+### 4.3 ADMINISTRATIVE FLOW — Operator Path
 
 ```
 1. Initial setup:
@@ -162,7 +198,7 @@ Raw scraped data (bronze) is never mutated. Derived/cleaned data (silver) is reb
 
 ---
 
-## 4. USER AND BUSINESS NEEDS
+## 5. USER AND BUSINESS NEEDS
 
 ### User Needs
 
@@ -200,7 +236,7 @@ Raw scraped data (bronze) is never mutated. Derived/cleaned data (silver) is reb
 
 ### Business Needs
 
-**BN1** — The system must score sponsorship confidence from verifiable primary sources (PERM filings, USCIS data) so that every ranking is defensible and auditable. The system does not provide legal immigration advice and must never present a confidence score as a guarantee — but the evidence behind each score must be traceable, because a student acting on an unsupported "high confidence" label risks wasting weeks of irreplaceable OPT time.
+**BN1** — Every sponsorship confidence score must be traceable to a primary source (PERM filings, USCIS petitions, or JD language) so that rankings are defensible and auditable. A student who acts on a high-confidence score that turns out to be based on four-year-old data has been misled by the system itself — the same failure mode the system was designed to prevent.
 
 - Component: WS2, WS5 (source labeling), ScoredJob `reasoning` field
 - Pass/Fail: Every non-zero `visa_confidence` score has a labeled source in `reasoning` (e.g., "123 PERM certifications on record").
@@ -212,7 +248,7 @@ Raw scraped data (bronze) is never mutated. Derived/cleaned data (silver) is reb
 
 ---
 
-## 5. CORE COMPONENT DOCUMENTATION
+## 6. CORE COMPONENT DOCUMENTATION
 
 ---
 
@@ -221,7 +257,7 @@ Raw scraped data (bronze) is never mutated. Derived/cleaned data (silver) is reb
 
 **Needs Served**: ON1, ON2
 
-**Problem it solves**: Job postings across 40+ companies live on three different ATS platforms with different response schemas. The scraper normalizes them into a single bronze schema and maintains a deduplicated silver layer with job lifecycle tracking.
+**Problem it solves**: A student cannot manually check 40 company career pages every morning across three incompatible ATS platforms — and even if they could, they would have no way to know which postings are new, which have quietly expired, or which they already saw yesterday. WS1 does this automatically: it scrapes all 40 companies on a daily schedule, normalizes the ATS-specific response formats into a single consistent schema, deduplicates by job ID, and tracks whether each posting is still actively visible. The pipeline only matches against jobs that were seen within the last 14 days — not against stale listings that have already closed.
 
 **How it works**:
 - Input: `Scrapers/companies.json` (40 companies, ATS platform per company)
@@ -278,7 +314,7 @@ Raw scraped data (bronze) is never mutated. Derived/cleaned data (silver) is reb
 
 **Needs Served**: UN1, UN2
 
-**Problem it solves**: Resumes arrive as unstructured PDFs or DOCX files. WS3 extracts structured features (skills, experience, seniority, degree) so that WS4 can embed the candidate's profile and WS5 can reason about role fit.
+**Problem it solves**: A resume is the candidate's primary artifact, but it almost never arrives in a clean format. International students especially tend to have non-standard date ranges, transliterated institution names, mixed-language skill listings, and implicit seniority signals that keyword extractors miss or misread. A mis-parsed resume produces a mis-ranked job list, and the student never knows the opportunities they were never shown. WS3 uses a 70B-parameter LLM to extract the full candidate story — years of experience, seniority level, complete technical stack, domain background, and degree field — into a structured `CandidateProfile` that every downstream scoring step can reason against. A rule-based fallback preserves partial functionality if the LLM is unavailable, so a slow API never leaves the student with zero results.
 
 **How it works**:
 - Input: Resume file path (PDF via pdfplumber, DOCX via python-docx) + `UserInputs`
@@ -306,7 +342,7 @@ Raw scraped data (bronze) is never mutated. Derived/cleaned data (silver) is reb
 
 **Needs Served**: UN1, UN2
 
-**Problem it solves**: Keyword matching cannot capture that "Data Infrastructure Engineer" is a strong match for a "Data Engineer" resume. WS4 uses sentence-transformers to embed both the candidate profile and all job descriptions, then ranks by cosine similarity blended with skill overlap and role/location flags.
+**Problem it solves**: A student who spent three years building distributed data pipelines may be a strong match for a "Data Infrastructure Engineer" role — but a keyword search for "Data Engineer" would never surface it. Students waste weeks applying to roles they found by title search while missing better-aligned roles with different titles. WS4 closes that gap by embedding both the candidate's structured profile and every job description into the same semantic vector space, then ranking by meaning rather than by word overlap. The result is a shortlist of up to 50 roles the candidate would plausibly not have found on their own — ranked by how well the job's actual requirements align with the candidate's actual experience, not just how similar the job title sounds.
 
 **How it works**:
 - **Index build** (offline step): Load silver jobs → filter active + target-role → embed each job (title + company + first 1,500 chars of description) using `all-MiniLM-L6-v2` (384-dim) → normalize → save `job_embeddings.npy` + `job_index.parquet`
@@ -344,7 +380,7 @@ match_score = 0.50 × semantic_score
 - **Recency** (0–1): Tiered decay — 0–3 days = 1.00, 4–7 = 0.85, 8–14 = 0.70, 15–30 = 0.50, 31–60 = 0.30, 60+ = 0.10
 - **JD Signal**: Regex cascade on job description — positive strong ("will sponsor") → +0.30; negative strong ("no sponsorship") → -0.40; positive weak → +0.15; negative weak → -0.20
 - **PERM Base Score**: `max(perm_certified, uscis_approvals)` drives volume band (0 → 0.30, 200+ → 0.85); trend adjustment (increasing +0.10, decreasing −0.05, decreasing_sharply −0.15); freshness discount; clamped [0.05, 0.95]. Unknown company (not in DB) = 0.40 base.
-- **Contradiction detection**: Not implemented in current codebase — planned but not built (see OQ6)
+- **Contradiction detection**: Not implemented in current codebase — planned but not built (see OQ4)
 - **Final score** (international): `0.40 × match_score + 0.35 × visa_confidence + 0.25 × recency_score`
 - **Final score** (domestic): `0.70 × match_score + 0.30 × recency_score`
 - **Reasoning builder**: Generates plain-English summary combining all score components
@@ -358,7 +394,7 @@ match_score = 0.50 × semantic_score
 2. JD contains both positive and negative sponsorship phrases → cascade logic picks highest-priority match; lower-priority phrases ignored.
 3. Candidate sets `requires_sponsorship=False` → Steps 6 and 7 skipped entirely; domestic scoring formula applied.
 
-**Scope Boundary**: Does NOT provide legal immigration advice, does NOT guarantee sponsorship, does NOT track per-role sponsorship (only company-level).
+**Scope Boundary**: Does NOT guarantee sponsorship outcomes, does NOT track per-role sponsorship (only company-level), does NOT make causal claims about why a company's filing count changed.
 
 ---
 
@@ -367,7 +403,7 @@ match_score = 0.50 × semantic_score
 
 **Needs Served**: All user needs (coordination layer)
 
-**Problem it solves**: 8 pipeline stages with skip conditions, error propagation, and intermediate state passing need a structured execution model. LangGraph provides a typed state machine with conditional edges, making each stage independently testable and error-isolated.
+**Problem it solves**: The skepticism pipeline is only trustworthy if each agent's output reaches the next without silent failures corrupting the chain. A resume parsed with low confidence should still produce matches. A company absent from the PERM database should still receive a score — just a conservative one. A scraping failure should not cascade into a zero-result response the student mistakes for "no jobs available." WS6's LangGraph state machine enforces this discipline: each of the 8 agents runs in sequence, deposits its outputs into a shared typed state, and routes to END on error rather than silently dropping data. The student always gets back a meaningful response or a clear failure message — never ambiguous silence.
 
 **How it works**:
 - `PipelineState` (TypedDict): carries all intermediate outputs across nodes
@@ -395,7 +431,7 @@ match_score = 0.50 × semantic_score
 
 **Needs Served**: UN1, ON2, BN2
 
-**Problem it solves**: The pipeline needs a stable REST interface that decouples the frontend from execution details, handles file uploads, and exposes data browsing + company lookup as independent capabilities.
+**Problem it solves**: A candidate who just clicked "Analyze" is waiting. They have no visibility into whether the pipeline is running, whether the sponsorship data is current, or what went wrong if nothing comes back. WS7 is the contract between that moment of waiting and the pipeline internals: it validates the uploaded file, confirms the embedding index exists before wasting time, executes the full pipeline within a 120-second window, and returns a structured response the frontend can render immediately. If something fails, WS7 returns a specific, actionable error — "embedding index not found, run /refresh first" — not a generic 500 that leaves the student wondering whether to try again.
 
 **How it works**:
 - 5 endpoints: POST /analyze, GET /jobs, GET /company/{name}/sponsorship, POST /refresh, GET /health
@@ -419,7 +455,7 @@ match_score = 0.50 × semantic_score
 
 **Needs Served**: UN1, UN2, UN3, UN4
 
-**Problem it solves**: The pipeline output is a JSON list of `ScoredJob` objects. WS8 makes that output navigable — filterable by signal/role/sort, visually differentiated by score tier, and directly actionable with apply links.
+**Problem it solves**: A ranked list of JSON scores is useless to a student who needs to make an apply-or-skip decision in the next thirty seconds. WS8 translates the pipeline's output into a decision-support interface: confidence badges that show sponsorship strength at a glance, trend icons that indicate whether a company's filing history is growing or declining, matched-skill chips that explain why this job surfaced, and a plain-English reasoning string that unpacks every component of the final score. The student can scan the top results in two minutes, understand why each job ranked where it did, and click directly to the posting — without opening a second tab, cross-referencing a government database, or guessing at what the numbers mean.
 
 **How it works**:
 - Sidebar: visa status, sponsorship toggle, target roles (multiselect), locations (multiselect), relocation toggle, top N slider
@@ -440,7 +476,7 @@ match_score = 0.50 × semantic_score
 
 ---
 
-## 6. EXTERNAL INTEGRATIONS AND DEPENDENCIES
+## 7. EXTERNAL INTEGRATIONS AND DEPENDENCIES
 
 ### Groq LLM API
 - **Owner**: Groq, Inc.
@@ -497,7 +533,7 @@ USCIS CSV ───────────────────────�
 
 ---
 
-## 7. DATA ARCHITECTURE AND STATE MANAGEMENT
+## 8. DATA ARCHITECTURE AND STATE MANAGEMENT
 
 ### Data Entity Inventory
 
@@ -564,7 +600,7 @@ USCIS CSV  ──►                                            │
 
 ---
 
-## 8. DOMAIN MODEL AND ENTITY DEFINITIONS
+## 9. DOMAIN MODEL AND ENTITY DEFINITIONS
 
 ### Ubiquitous Language
 
@@ -616,7 +652,7 @@ USCIS CSV  ──►                                            │
 
 ---
 
-## 9. API CONTRACT DOCUMENTATION
+## 10. API CONTRACT DOCUMENTATION
 
 ### POST /analyze
 
@@ -768,9 +804,9 @@ USCIS CSV  ──►                                            │
 
 ---
 
-## 10. DATA FLOW AND SEQUENCE DIAGRAMS
+## 11. DATA FLOW AND SEQUENCE DIAGRAMS
 
-### 10.1 Happy Path — Resume Upload to Ranked Results
+### 11.1 Happy Path — Resume Upload to Ranked Results
 
 ```
 User           WS8 (Streamlit)    WS7 (FastAPI)      WS6 (LangGraph)        External
@@ -807,7 +843,7 @@ User           WS8 (Streamlit)    WS7 (FastAPI)      WS6 (LangGraph)        Exte
 
 ---
 
-### 10.2 Failure Path 1 — Groq Unavailable
+### 11.2 Failure Path 1 — Groq Unavailable
 
 ```
 ResumeParserAgent
@@ -823,7 +859,7 @@ ResumeParserAgent
 
 ---
 
-### 10.3 Failure Path 2 — Embedding Index Missing
+### 11.3 Failure Path 2 — Embedding Index Missing
 
 ```
 WS7 /analyze
@@ -836,7 +872,7 @@ WS7 /analyze
 
 ---
 
-### 10.4 Daily Refresh Sequence (Cron)
+### 11.4 Daily Refresh Sequence (Cron)
 
 ```
 cron (14:00 UTC)
@@ -862,13 +898,13 @@ cron (14:00 UTC)
 
 ---
 
-## 11. SCORING METHODOLOGY — HOW THE NUMBERS ARE DERIVED
+## 12. SCORING METHODOLOGY — HOW THE NUMBERS ARE DERIVED
 
 This section documents every numeric score the system produces, where each number comes from, why those specific values were chosen, and what the known limitations are.
 
 ---
 
-### 11.1 Match Score (WS4)
+### 12.1 Match Score (WS4)
 
 The match score is a weighted blend of four sub-signals computed in `ws4_job_matcher.py`.
 
@@ -940,7 +976,7 @@ match_score = max(0.0,
 
 ---
 
-### 11.2 Recency Score (WS5)
+### 12.2 Recency Score (WS5)
 
 Recency is a time-decay function over days since the job was posted. It rewards fresh postings and penalizes old ones.
 
@@ -973,7 +1009,7 @@ The 0.10 floor (not 0) is intentional — even a 90-day-old posting is worth sur
 
 ---
 
-### 11.3 JD Sponsorship Signal (WS5)
+### 12.3 JD Sponsorship Signal (WS5)
 
 The JD signal is extracted from raw job description text using a priority-ordered regex cascade. It produces a **label** and a **delta** applied to visa confidence.
 
@@ -995,7 +1031,7 @@ The JD signal is extracted from raw job description text using a priority-ordere
 
 ---
 
-### 11.4 PERM Base Score (WS5)
+### 12.4 PERM Base Score (WS5)
 
 The PERM base score is a company-level signal derived from filing history. The input is `max(total_perm_certified, uscis_total_approvals)` — whichever is higher between PERM certifications and USCIS approvals is used, so a company strong in one source but weak in the other still gets credit.
 
@@ -1056,11 +1092,11 @@ The `0.45 + 0.55 × freshness` formula:
 
 #### Contradiction Detection
 
-**Not implemented in the current codebase.** The WS5 code computes visa_confidence as a direct combination of PERM score + JD delta with no cross-validation step. The three contradiction checks described in earlier draft documentation (JD positive but 0 PERM filings → −0.10, etc.) were designed but not built. This is an open gap — see OQ6.
+**Not implemented in the current codebase.** The WS5 code computes visa_confidence as a direct combination of PERM score + JD delta with no cross-validation step. The three contradiction checks described in earlier draft documentation (JD positive but 0 PERM filings → −0.10, etc.) were designed but not built. This is an open gap — see OQ4.
 
 ---
 
-### 11.5 Visa Confidence Score (WS5 — International Candidates Only)
+### 12.5 Visa Confidence Score (WS5 — International Candidates Only)
 
 Visa confidence combines the PERM base score (post-trend, post-freshness) with the JD signal delta.
 
@@ -1089,7 +1125,7 @@ visa_confidence      = clamp(0.613 + 0.00, 0.05, 0.95) = 0.61
 
 ---
 
-### 11.6 Final Score (WS5)
+### 12.6 Final Score (WS5)
 
 The final score is the ranking signal. Two formulas are used depending on sponsorship requirement.
 
@@ -1118,7 +1154,7 @@ Visa confidence is dropped entirely. Match quality dominates.
 
 ---
 
-### 11.7 Full End-to-End Score Walkthrough
+### 12.7 Full End-to-End Score Walkthrough
 
 **Candidate**: F-1 OPT, Data Engineer, San Francisco, 5 skills: Python, Spark, SQL, Airflow, dbt
 **Job**: Stripe — Senior Data Engineer, Platform (San Francisco) | Posted 5 days ago | 87 PERM certifications, stable, freshness 0.82 | JD: no sponsorship phrase
@@ -1171,7 +1207,7 @@ final_score = (0.40 × 0.755) + (0.35 × 0.61) + (0.25 × 0.85)
 
 ---
 
-### 11.8 Score Interaction Table
+### 12.8 Score Interaction Table
 
 How scores shift across representative candidate types (international, unless noted):
 
@@ -1193,7 +1229,7 @@ Key observations:
 
 ---
 
-### 11.9 What the Scores Cannot Tell You
+### 12.9 What the Scores Cannot Tell You
 
 | Claim | Why It Cannot Be Made |
 |-------|-----------------------|
@@ -1205,7 +1241,7 @@ Key observations:
 
 ---
 
-## 12. COMPONENT LIST WITH PRIORITY TAGS
+## 13. COMPONENT LIST WITH PRIORITY TAGS
 
 | Component | Priority | Need Served | Dependency | Scope Boundary |
 |-----------|----------|-------------|------------|----------------|
@@ -1242,7 +1278,7 @@ With MUST-BUILD only, a candidate can: upload a resume PDF, specify visa status 
 
 ---
 
-## 13. OUT OF SCOPE
+## 14. OUT OF SCOPE
 
 | Feature / Capability | Reason for Exclusion | Reopen Condition |
 |----------------------|---------------------|-----------------|
@@ -1259,7 +1295,7 @@ With MUST-BUILD only, a candidate can: upload a resume PDF, specify visa status 
 
 ---
 
-## 14. INFRASTRUCTURE AND DEPLOYMENT REQUIREMENTS
+## 15. INFRASTRUCTURE AND DEPLOYMENT REQUIREMENTS
 
 ### Current (Academic / Demo)
 
@@ -1309,7 +1345,7 @@ With MUST-BUILD only, a candidate can: upload a resume PDF, specify visa status 
 
 ---
 
-## 15. OPEN QUESTIONS LOG
+## 16. OPEN QUESTIONS LOG
 
 | # | Question | Stakes | Deadline | Options | Owner | Status |
 |---|----------|--------|----------|---------|-------|--------|
@@ -1320,7 +1356,7 @@ With MUST-BUILD only, a candidate can: upload a resume PDF, specify visa status 
 
 ---
 
-## 16. MODEL AND TECHNOLOGY SELECTION RATIONALE
+## 17. MODEL AND TECHNOLOGY SELECTION RATIONALE
 
 This section documents why each significant model and framework was chosen, what alternatives were considered, and what tradeoffs were accepted. These decisions are not self-evident from the code.
 

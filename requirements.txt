@@ -1,38 +1,40 @@
+# ── Install ────────────────────────────────────────────────────────────────────
+# pip install -r requirements.txt
+# Requires Python 3.12+
+# ──────────────────────────────────────────────────────────────────────────────
+
 # ── Core data ──────────────────────────────────────────────────────────────────
 pandas
 numpy
-openpyxl          # read .xlsx files (PERM disclosure data)
-pyarrow           # parquet read/write (silver layer)
+openpyxl          # read .xlsx PERM disclosure files (WS2)
+pyarrow           # parquet read/write for bronze/silver layers
+
+# ── Document parsing ───────────────────────────────────────────────────────────
+pdfplumber        # extract text from PDF resumes (WS3)
+docx               # extract text from DOCX resumes (WS3)
 
 # ── Web scraping ───────────────────────────────────────────────────────────────
 requests
-beautifulsoup4
-selenium
+beautifulsoup4    # parse HTML job descriptions (WS1)
 
-# ── Visualisation ──────────────────────────────────────────────────────────────
-matplotlib
-seaborn
+# ── Semantic similarity ────────────────────────────────────────────────────────
+sentence-transformers  # all-MiniLM-L6-v2 embeddings for job matching (WS4)
 
-# ── ML / similarity (future WS3–WS5) ──────────────────────────────────────────
-scikit-learn
-sentence-transformers   # semantic job matching (WS4)
+# ── LLM / agent orchestration ─────────────────────────────────────────────────
+groq               # Llama 3.3 70B for structured resume parsing (WS3)
+langgraph          # sequential StateGraph pipeline orchestrator (WS6)
+langchain         # base types used by langgraph internals
 
-# ── LLM / agent orchestration (future WS3–WS6) ────────────────────────────────
-langchain
-langgraph
-openai              # or swap for anthropic sdk
-anthropic
-
-# ── API / backend (future WS7) ────────────────────────────────────────────────
+# ── API / backend ──────────────────────────────────────────────────────────────
 fastapi
-uvicorn[standard]
-python-multipart    # resume file upload
+uvicorn[standard] # ASGI server for WS7
+python-multipart  # multipart/form-data resume uploads
 
-# ── Utilities ─────────────────────────────────────────────────────────────────
-python-dotenv
-tqdm
-pydantic            # data models / validated schemas
+# ── Frontend ───────────────────────────────────────────────────────────────────
+streamlit         # candidate-facing UI (WS8)
 
-# ── Dev / notebooks ───────────────────────────────────────────────────────────
-jupyter
-ipykernel
+# ── Utilities ──────────────────────────────────────────────────────────────────
+python-dotenv      # load GROQ_API_KEY from .env
+pydantic          # data model validation across all WS components
+tqdm              # progress bars during scraping / index build
+typing-extensions # TypedDict used in LangGraph PipelineState (WS6)
