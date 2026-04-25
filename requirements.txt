@@ -11,7 +11,11 @@ pyarrow           # parquet read/write for bronze/silver layers
 
 # ── Document parsing ───────────────────────────────────────────────────────────
 pdfplumber        # extract text from PDF resumes (WS3)
+<<<<<<< Updated upstream
 docx               # extract text from DOCX resumes (WS3)
+=======
+docx              # extract text from DOCX resumes (WS3)
+>>>>>>> Stashed changes
 
 # ── Web scraping ───────────────────────────────────────────────────────────────
 requests
@@ -21,8 +25,13 @@ beautifulsoup4    # parse HTML job descriptions (WS1)
 sentence-transformers  # all-MiniLM-L6-v2 embeddings for job matching (WS4)
 
 # ── LLM / agent orchestration ─────────────────────────────────────────────────
+<<<<<<< Updated upstream
 groq               # Llama 3.3 70B for structured resume parsing (WS3)
 langgraph          # sequential StateGraph pipeline orchestrator (WS6)
+=======
+groq              # Llama 3.3 70B for structured resume parsing (WS3)
+langgraph         # sequential StateGraph pipeline orchestrator (WS6)
+>>>>>>> Stashed changes
 langchain         # base types used by langgraph internals
 
 # ── API / backend ──────────────────────────────────────────────────────────────
@@ -34,7 +43,11 @@ python-multipart  # multipart/form-data resume uploads
 streamlit         # candidate-facing UI (WS8)
 
 # ── Utilities ──────────────────────────────────────────────────────────────────
+<<<<<<< Updated upstream
 python-dotenv      # load GROQ_API_KEY from .env
+=======
+python-dotenv     # load GROQ_API_KEY from .env
+>>>>>>> Stashed changes
 pydantic          # data model validation across all WS components
 tqdm              # progress bars during scraping / index build
 typing-extensions # TypedDict used in LangGraph PipelineState (WS6)

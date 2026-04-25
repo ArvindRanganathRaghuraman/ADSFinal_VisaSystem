@@ -1,0 +1,27 @@
+# Python
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.python-version
+
+# Generated data (mounted as volumes at runtime)
+Scrapers/data/
+Data/silver/
+
+# Dev uploads
+Resumes/
+
+# Docs / tooling
+.git/
+.claude/
+.vscode/
+Diagrams/
+logs/
+*.md
+*.lock
+*.toml
+
+# Secrets — never bake into image
+.env

@@ -1,0 +1,21 @@
+FROM python:3.12-slim
+
+WORKDIR /app
+
+# Only the two packages the frontend actually needs
+RUN pip install --no-cache-dir streamlit requests
+
+# Copy only the frontend module — no pipeline logic or data files required
+COPY pipeline/ws8_frontend.py pipeline/ws8_frontend.py
+RUN touch pipeline/__init__.py
+
+EXPOSE 8501
+
+# Overridden by docker-compose to http://backend:8000 (Docker internal DNS).
+# Falls back to localhost so the image still works when run standalone.
+ENV BACKEND_URL=http://localhost:8000
+
+CMD ["streamlit", "run", "pipeline/ws8_frontend.py", \
+     "--server.port=8501", \
+     "--server.address=0.0.0.0", \
+     "--server.headless=true"]
