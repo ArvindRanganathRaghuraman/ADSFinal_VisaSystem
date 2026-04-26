@@ -27,7 +27,7 @@ import streamlit as st
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-API_BASE      = os.getenv("BACKEND_URL", "https://adsfinalbackend-134643354783.europe-west1.run.app")
+API_BASE      = os.getenv("BACKEND_URL", "https://adsfinalbackend-134643354783.europe-west1.run.app/")
 TIMEOUT_SHORT = 5    # health check
 TIMEOUT_LONG  = 120  # analyze call (pipeline can take ~30-60 s)
 
@@ -260,9 +260,6 @@ with st.sidebar:
         )
         if all_ready:
             st.success("Backend ready")
-        elif health.get("refresh_running"):
-            st.info("Data loading in progress — this takes ~2 min on first start. Page will refresh automatically.")
-            import time; time.sleep(5); st.rerun()
         else:
             missing = [
                 k.replace("_exists", "").replace("_", " ").title()
@@ -270,8 +267,11 @@ with st.sidebar:
                 if not health.get(k)
             ]
             st.warning(
-                f"Data layer not ready. Missing: {', '.join(missing)}.\n\nBuilding index automatically on backend startup — please wait a moment and refresh."
+                f"Data layer not ready.\nMissing: {', '.join(missing)}.\n\n"
+                "Run `POST /refresh` once to build the index."
             )
+        if health.get("refresh_running"):
+            st.info("Data refresh in progress...")
         if health.get("last_refresh"):
             st.caption(f"Last refresh: {health['last_refresh'][:19]}")
 
