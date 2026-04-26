@@ -16,16 +16,13 @@ COPY models/   models/
 COPY pipeline/ pipeline/
 COPY Scrapers/ Scrapers/
 
-# Static government data files (PERM xlsx + USCIS csv) baked into the image.
-# Generated silver-layer parquets are mounted as a volume at runtime.
-COPY Data/PERM/  Data/PERM/
-COPY Data/USCIS/ Data/USCIS/
+# Static government data files + pre-built silver layer and embedding index
+COPY Data/PERM/   Data/PERM/
+COPY Data/USCIS/  Data/USCIS/
+COPY Data/silver/ Data/silver/
+COPY Scrapers/data/ Scrapers/data/
 
-# Ensure writable directories exist for runtime-generated data
-RUN mkdir -p Data/silver \
-             Scrapers/data/bronze \
-             Scrapers/data/silver \
-             logs
+RUN mkdir -p logs
 
 EXPOSE 8000
 

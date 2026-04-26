@@ -164,6 +164,44 @@ def _load_sponsorship_df() -> pd.DataFrame:
     return pd.read_parquet(SPONSORSHIP_PARQUET)
 
 
+def _run_index_only() -> None:
+    """On startup: skip scraping, just build WS2 + WS4 from baked-in data files."""
+    global _refresh_status
+    with _refresh_lock:
+        if _refresh_status["running"]:
+            return
+        _refresh_status["running"]    = True
+        _refresh_status["last_error"] = None
+    try:
+        log.info("[WS7/startup] Building index from baked-in data...")
+        from pipeline.ws2_build_sponsorship import (
+            SILVER_CSV, SILVER_DIR, SILVER_PARQUET,
+            aggregate_perm, load_all_perm, load_uscis,
+        )
+        perm_raw = load_all_perm()
+        perm_agg = aggregate_perm(perm_raw)
+        uscis    = load_uscis()
+        combined = perm_agg.merge(uscis, on="company_name_norm", how="outer")
+        for col in ("uscis_total_approvals", "uscis_total_denials"):
+            combined[col] = combined[col].fillna(0).astype(int)
+        combined = combined.sort_values("total_perm_certified", ascending=False).reset_index(drop=True)
+        for col in ("naics", "state", "company_name_raw"):
+            combined[col] = combined[col].astype(str)
+        SILVER_DIR.mkdir(parents=True, exist_ok=True)
+        combined.to_parquet(SILVER_PARQUET, index=False)
+        combined.to_csv(SILVER_CSV, index=False, encoding="utf-8-sig")
+        log.info("[WS7/startup] WS2 done — %d companies", len(combined))
+        from pipeline.ws4_job_matcher import build_index
+        build_index(force=True)
+        log.info("[WS7/startup] WS4 index built")
+        _refresh_status["last_run"] = datetime.now(timezone.utc).isoformat()
+    except Exception as exc:
+        _refresh_status["last_error"] = str(exc)
+        log.exception("[WS7/startup] Failed: %s", exc)
+    finally:
+        _refresh_status["running"] = False
+
+
 def _run_refresh_background(force: bool = True) -> None:
     """Runs WS1 + WS2 + WS4 index build in a background thread."""
     global _refresh_status
