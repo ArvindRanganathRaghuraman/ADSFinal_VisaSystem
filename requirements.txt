@@ -1,15 +1,38 @@
+# pip install -r requirements.txt
+# Requires Python 3.12+
 
+# ── Core data ──────────────────────────────────────────────────────────────────
 pandas
 numpy
-openpyxl
-matplotlib
-seaborn
-seaborn
-scikit-learn
+openpyxl          # read .xlsx PERM disclosure files (WS2)
+pyarrow           # parquet read/write for bronze/silver layers
+
+# ── Document parsing ───────────────────────────────────────────────────────────
+pdfplumber        # extract text from PDF resumes (WS3)
+docx              # extract text from DOCX resumes (WS3)
+
+# ── Web scraping ───────────────────────────────────────────────────────────────
 requests
-beautifulsoup4
-selenium
-jupyter
-ipykernel
-tqdm
-python-dotenv
+beautifulsoup4    # parse HTML job descriptions (WS1)
+
+# ── Semantic similarity ────────────────────────────────────────────────────────
+sentence-transformers  # all-MiniLM-L6-v2 embeddings for job matching (WS4)
+
+# ── LLM / agent orchestration ─────────────────────────────────────────────────
+groq              # Llama 3.3 70B for structured resume parsing (WS3)
+langgraph         # sequential StateGraph pipeline orchestrator (WS6)
+langchain         # base types used by langgraph internals
+
+# ── API / backend ──────────────────────────────────────────────────────────────
+fastapi
+uvicorn[standard] # ASGI server for WS7
+python-multipart  # multipart/form-data resume uploads
+
+# ── Frontend ───────────────────────────────────────────────────────────────────
+streamlit         # candidate-facing UI (WS8)
+
+# ── Utilities ──────────────────────────────────────────────────────────────────
+python-dotenv     # load GROQ_API_KEY from .env
+pydantic          # data model validation across all WS components
+tqdm              # progress bars during scraping / index build
+typing-extensions # TypedDict used in LangGraph PipelineState (WS6)

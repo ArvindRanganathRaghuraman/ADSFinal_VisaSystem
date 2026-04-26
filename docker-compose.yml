@@ -1,0 +1,38 @@
+services:
+
+  backend:
+    build:
+      context: .
+      dockerfile: Dockerfile.backend
+    ports:
+      - "8000:8000"
+    env_file:
+      - .env                             # provides GROQ_API_KEY
+    volumes:
+      - silver_data:/app/Data/silver          # sponsorship_history.parquet
+      - scraper_data:/app/Scrapers/data       # bronze + silver jobs + embeddings
+      - logs:/app/logs
+    healthcheck:
+      test: ["CMD", "python", "-c",
+             "import urllib.request; urllib.request.urlopen('http://localhost:8000/health')"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+
+  frontend:
+    build:
+      context: .
+      dockerfile: Dockerfile.frontend
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://backend:8000  # Docker internal DNS — not localhost
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  silver_data:
+  scraper_data:
+  logs:
