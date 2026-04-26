@@ -63,10 +63,18 @@ logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(me
 
 # ── App setup ──────────────────────────────────────────────────────────────────
 
+from contextlib import asynccontextmanager
+
+@asynccontextmanager
+async def lifespan(_app: FastAPI):
+    threading.Thread(target=_run_refresh_background, kwargs={"force": False}, daemon=True).start()
+    yield
+
 app = FastAPI(
     title       = "VisaMatch API",
     description = "AI-powered job matching for international candidates (F-1 OPT / H-1B)",
     version     = "0.1.0",
+    lifespan    = lifespan,
 )
 
 app.add_middleware(

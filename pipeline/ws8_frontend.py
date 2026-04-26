@@ -260,6 +260,9 @@ with st.sidebar:
         )
         if all_ready:
             st.success("Backend ready")
+        elif health.get("refresh_running"):
+            st.info("Data loading in progress — this takes ~2 min on first start. Page will refresh automatically.")
+            import time; time.sleep(5); st.rerun()
         else:
             missing = [
                 k.replace("_exists", "").replace("_", " ").title()
@@ -267,11 +270,8 @@ with st.sidebar:
                 if not health.get(k)
             ]
             st.warning(
-                f"Data layer not ready.\nMissing: {', '.join(missing)}.\n\n"
-                "Run `POST /refresh` once to build the index."
+                f"Data layer not ready. Missing: {', '.join(missing)}.\n\nBuilding index automatically on backend startup — please wait a moment and refresh."
             )
-        if health.get("refresh_running"):
-            st.info("Data refresh in progress...")
         if health.get("last_refresh"):
             st.caption(f"Last refresh: {health['last_refresh'][:19]}")
 
