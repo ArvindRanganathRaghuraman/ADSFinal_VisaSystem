@@ -11,10 +11,6 @@ RUN apt-get update \
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Pre-download the embedding model at build time (~80 MB)
-# so the first /analyze call doesn't stall waiting for HuggingFace
-RUN python -c "from sentence_transformers import SentenceTransformer; SentenceTransformer('all-MiniLM-L6-v2')"
-
 # Application source
 COPY models/   models/
 COPY pipeline/ pipeline/
@@ -34,4 +30,4 @@ RUN mkdir -p Data/silver \
 EXPOSE 8000
 
 # GROQ_API_KEY must be provided at runtime via --env-file .env or the compose env_file
-CMD ["uvicorn", "pipeline.ws7_backend:app", "--host", "0.0.0.0", "--port", "8000"]
+CMD ["sh", "-c", "uvicorn pipeline.ws7_backend:app --host 0.0.0.0 --port ${PORT:-8000}"]

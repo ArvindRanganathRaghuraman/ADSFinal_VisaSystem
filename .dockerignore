@@ -6,10 +6,6 @@ __pycache__/
 *.pyo
 .python-version
 
-# Generated data (mounted as volumes at runtime)
-Scrapers/data/
-Data/silver/
-
 # Dev uploads
 Resumes/
 

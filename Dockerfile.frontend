@@ -15,7 +15,4 @@ EXPOSE 8501
 # Falls back to localhost so the image still works when run standalone.
 ENV BACKEND_URL=http://localhost:8000
 
-CMD ["streamlit", "run", "pipeline/ws8_frontend.py", \
-     "--server.port=8501", \
-     "--server.address=0.0.0.0", \
-     "--server.headless=true"]
+CMD ["sh", "-c", "streamlit run pipeline/ws8_frontend.py --server.port=${PORT:-8501} --server.address=0.0.0.0 --server.headless=true"]

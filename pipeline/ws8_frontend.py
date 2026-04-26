@@ -18,11 +18,8 @@ Run
 """
 
 import io
-<<<<<<< Updated upstream
-=======
 import os
 import textwrap
->>>>>>> Stashed changes
 import time
 
 import requests
@@ -30,7 +27,7 @@ import streamlit as st
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-API_BASE      = os.getenv("BACKEND_URL", "http://localhost:8000")
+API_BASE      = os.getenv("BACKEND_URL", "https://adsfinalbackend-134643354783.europe-west1.run.app")
 TIMEOUT_SHORT = 5    # health check
 TIMEOUT_LONG  = 120  # analyze call (pipeline can take ~30-60 s)
 
