@@ -27,9 +27,9 @@ import streamlit as st
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-API_BASE      = os.getenv("BACKEND_URL", "https://adsfinalbackend-134643354783.europe-west1.run.app/")
-TIMEOUT_SHORT = 5    # health check
-TIMEOUT_LONG  = 120  # analyze call (pipeline can take ~30-60 s)
+API_BASE      = os.getenv("BACKEND_URL", "https://backendads-134643354783.us-east1.run.app")
+TIMEOUT_SHORT = 30   # health check
+TIMEOUT_LONG  = 300  # analyze call (pipeline can take ~30-60 s)
 
 # ── Page setup ─────────────────────────────────────────────────────────────────
 
@@ -129,13 +129,14 @@ def _trend_icon(trend: str | None) -> str:
 
 
 def _check_backend() -> dict | None:
-    """Returns health dict or None on failure."""
-    try:
-        r = requests.get(f"{API_BASE}/health", timeout=TIMEOUT_SHORT)
-        if r.ok:
-            return r.json()
-    except requests.exceptions.ConnectionError:
-        pass
+    """Returns health dict or None on failure. Retries 3 times."""
+    for _ in range(3):
+        try:
+            r = requests.get(f"{API_BASE}/health", timeout=TIMEOUT_SHORT)
+            if r.ok:
+                return r.json()
+        except (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout):
+            time.sleep(2)
     return None
 
 
@@ -468,39 +469,34 @@ for idx, job in enumerate(filtered, start=1):
     trend_ico  = _trend_icon(trend)
     posted_str = f"{days_ago}d ago" if days_ago >= 0 else "date unknown"
 
-    with st.container():
-        st.markdown(
-            f"""
-            <div class="job-card">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                    <div>
-                        <span style="font-size:1.12rem; font-weight:700;">{idx}. {title}</span>
-                        &nbsp;&nbsp;
-                        <span style="color:#555; font-size:0.95rem;">{company}</span>
-                    </div>
-                    <div style="text-align:right; font-size:0.85rem; color:#777;">
-                        {em} <strong>{final:.2f}</strong>&nbsp;final score
-                    </div>
-                </div>
-                <div style="font-size:0.85rem; color:#666; margin:4px 0 8px;">
-                    📍 {location} &nbsp;·&nbsp; 🕐 Posted {posted_str}
-                    {"&nbsp;·&nbsp; ✅ Target role" if role_ok else ""}
-                    {"&nbsp;·&nbsp; 📌 Location match" if loc_ok else ""}
-                </div>
-                <div style="margin-bottom:8px;">
-                    {badge_html}
-                    <span class="badge" style="background:#f0f0f0;color:#333;">
-                        Match {match*100:.0f}%
-                    </span>
-                    <span class="badge" style="background:#f0f0f0;color:#333;">
-                        Recency {recency*100:.0f}%
-                    </span>
-                    {f'<span class="badge" style="background:#f0f0f0;color:#333;">PERM {perm_cnt} filings {trend_ico}</span>' if req_spons and perm_cnt else ""}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
-        )
+    with st.container(border=True):
+        col_title, col_score = st.columns([3, 1])
+        with col_title:
+            st.markdown(f"**{idx}. {title}** &nbsp; {company}")
+        with col_score:
+            st.markdown(f"{em} **{final:.2f}** final score")
+
+        meta = f"📍 {location} · 🕐 Posted {posted_str}"
+        if role_ok:  meta += " · ✅ Target role"
+        if loc_ok:   meta += " · 📌 Location match"
+        st.caption(meta)
+
+        tags = []
+        if req_spons and visa_c is not None:
+            sig = signal.lower()
+            if sig in ("positive", "likely_positive"):
+                tags.append(f"✅ Likely Sponsors ({visa_c*100:.0f}%)")
+            elif sig in ("negative", "likely_negative"):
+                tags.append(f"❌ May Not Sponsor ({visa_c*100:.0f}%)")
+            else:
+                tags.append(f"❓ Sponsorship Unknown")
+        elif not req_spons:
+            tags.append("🟣 Domestic — no visa needed")
+        tags.append(f"Match {match*100:.0f}%")
+        tags.append(f"Recency {recency*100:.0f}%")
+        if req_spons and perm_cnt:
+            tags.append(f"PERM {perm_cnt} filings {trend_ico}")
+        st.markdown(" &nbsp;|&nbsp; ".join(f"`{t}`" for t in tags))
 
         # Expandable detail panel
         with st.expander("Details & Reasoning"):
