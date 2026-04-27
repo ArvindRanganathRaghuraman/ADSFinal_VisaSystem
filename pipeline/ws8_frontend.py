@@ -540,3 +540,4 @@ st.caption(
     "VisaMatch · ADSFinal_VisaSystem · "
     "Scores are demo estimates — not legal or immigration advice."
 )
+st.caption("Built by **Arvind Ranganath Raghuraman** & **Akash Arokianathan**")
