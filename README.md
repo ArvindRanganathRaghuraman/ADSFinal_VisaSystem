@@ -118,7 +118,7 @@ docker run -p 8501:8501 \
 
 ## Live Demo
 
-- **Frontend:** https://adsfinalvisasystem-f9lltbb4nxcmbedjzn4jsd.streamlit.app/ *(Streamlit Cloud)*
+- **Frontend:** https://adsfinalvisasystem-z6ctr9ey4dgvwpfoqebwmw.streamlit.app/ *(Streamlit Cloud)*
 - **Backend API:** https://backendads-134643354783.us-east1.run.app *(Google Cloud Run)*
 - **API Docs:** https://backendads-134643354783.us-east1.run.app/docs
 
