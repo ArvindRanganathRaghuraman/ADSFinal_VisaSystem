@@ -118,7 +118,7 @@ docker run -p 8501:8501 \
 
 ## Live Demo
 
-- **Frontend:** https://adsfinalvisasystem-z6ctr9ey4dgvwpfoqebwmw.streamlit.app/ *(Streamlit Cloud)*
+- **Frontend:** https://adsfinalvisasystem-fusfe23usxrdrappp6ysopy.streamlit.app/ *(Streamlit Cloud)*
 - **Backend API:** https://backendads-134643354783.us-east1.run.app *(Google Cloud Run)*
 - **API Docs:** https://backendads-134643354783.us-east1.run.app/docs
 
@@ -171,3 +171,8 @@ ADSFinal_VisaSystem/
 - **Frontend:** Streamlit
 - **Data:** DOL PERM Disclosure Data + USCIS I-129 Records
 - **Deployment:** Google Cloud Run + Streamlit Cloud
+
+## Contributions
+- **Backend** Akash
+- **Frontend and Deployment** Arvind
+- **Rest were shared and split equally**
