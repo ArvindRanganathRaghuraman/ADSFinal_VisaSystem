@@ -18,6 +18,8 @@ Run
 """
 
 import io
+import os
+import textwrap
 import time
 
 import requests
@@ -25,9 +27,9 @@ import streamlit as st
 
 # ── Config ─────────────────────────────────────────────────────────────────────
 
-API_BASE      = "http://localhost:8000"
-TIMEOUT_SHORT = 5    # health check
-TIMEOUT_LONG  = 120  # analyze call (pipeline can take ~30-60 s)
+API_BASE      = os.getenv("BACKEND_URL", "https://backendads-134643354783.us-east1.run.app")
+TIMEOUT_SHORT = 30   # health check
+TIMEOUT_LONG  = 300  # analyze call (pipeline can take ~30-60 s)
 
 # ── Page setup ─────────────────────────────────────────────────────────────────
 
@@ -95,17 +97,34 @@ def _visa_badge(signal: str, confidence: float | None, requires: bool) -> str:
     pct = f"{confidence * 100:.0f}%"
     sig = signal.lower()
 
-    if sig in ("positive", "likely_positive"):
-        label = "Likely Sponsors"
-        cls   = "badge-high" if sig == "positive" else "badge-likely"
-    elif sig in ("negative", "likely_negative"):
-        label = "May Not Sponsor"
-        cls   = "badge-neg"
-    else:
-        label = "Sponsorship Unknown"
-        cls   = "badge-unknown"
+    if sig == "positive":
+        return f'<span class="badge badge-high">✅ JD Confirms Sponsorship ({pct})</span>'
+    if sig == "likely_positive":
+        return f'<span class="badge badge-likely">🟢 JD Suggests Sponsorship ({pct})</span>'
+    if sig == "negative":
+        return f'<span class="badge badge-neg">❌ JD: No Sponsorship ({pct})</span>'
+    if sig == "likely_negative":
+        return f'<span class="badge badge-neg">⚠️ JD: Auth Required ({pct})</span>'
 
-    return f'<span class="badge {cls}">{label} ({pct})</span>'
+    # JD silent — use PERM confidence to set the label
+    if confidence >= 0.65:
+        return f'<span class="badge badge-likely">📊 Likely (PERM history, {pct})</span>'
+    if confidence >= 0.45:
+        return f'<span class="badge badge-unknown">📊 Uncertain (PERM history, {pct})</span>'
+    return f'<span class="badge badge-neg">📊 Unlikely (PERM history, {pct})</span>'
+
+
+def _is_likely_sponsor(job: dict, req_spons: bool) -> bool:
+    """True if job is likely to sponsor — accounts for JD signal and PERM history."""
+    if not req_spons:
+        return False
+    sig   = (job.get("sponsorship_signal") or "").lower()
+    visa_c = job.get("visa_confidence") or 0.0
+    if sig in ("positive", "likely_positive"):
+        return True
+    if sig not in ("negative", "likely_negative") and visa_c >= 0.65:
+        return True
+    return False
 
 
 def _score_color(score: float) -> str:
@@ -127,13 +146,14 @@ def _trend_icon(trend: str | None) -> str:
 
 
 def _check_backend() -> dict | None:
-    """Returns health dict or None on failure."""
-    try:
-        r = requests.get(f"{API_BASE}/health", timeout=TIMEOUT_SHORT)
-        if r.ok:
-            return r.json()
-    except requests.exceptions.ConnectionError:
-        pass
+    """Returns health dict or None on failure. Retries 3 times."""
+    for _ in range(3):
+        try:
+            r = requests.get(f"{API_BASE}/health", timeout=TIMEOUT_SHORT)
+            if r.ok:
+                return r.json()
+        except (requests.exceptions.ConnectionError, requests.exceptions.ReadTimeout):
+            time.sleep(2)
     return None
 
 
@@ -306,7 +326,6 @@ if not uploaded_file:
 # ── Run analysis ───────────────────────────────────────────────────────────────
 
 if analyze_btn:
-    # Validate sidebar inputs
     if not target_roles_list:
         st.error("Select at least one target role in the sidebar.")
         st.stop()
@@ -314,8 +333,8 @@ if analyze_btn:
         st.error("Select at least one preferred location in the sidebar.")
         st.stop()
 
-    target_roles_str      = ",".join(target_roles_list)
-    preferred_locs_str    = ",".join(preferred_locations_list)
+    target_roles_str   = ",".join(target_roles_list)
+    preferred_locs_str = ",".join(preferred_locations_list)
 
     with st.spinner("Parsing resume and ranking jobs... (this can take ~30-60 seconds)"):
         t0 = time.time()
@@ -331,19 +350,12 @@ if analyze_btn:
                 top_n                = top_n,
             )
         except requests.exceptions.ConnectionError:
-            st.error(
-                "Cannot reach the backend. Make sure WS7 is running:\n\n"
-                "```\n"
-                "/opt/anaconda3/bin/python -m uvicorn pipeline.ws7_backend:app "
-                "--reload --port 8000\n"
-                "```"
-            )
+            st.error("Cannot reach the backend.")
             st.stop()
         except requests.exceptions.Timeout:
             st.error(
                 "The pipeline timed out. The job index may not be built yet.\n\n"
-                "Call `POST /refresh` from http://localhost:8000/docs, wait a few "
-                "minutes, then try again."
+                f"Call `POST /refresh` from {API_BASE}/docs, wait a few minutes, then try again."
             )
             st.stop()
         except requests.exceptions.HTTPError as exc:
@@ -354,15 +366,14 @@ if analyze_btn:
             st.error(f"Backend error: {detail}")
             st.stop()
 
-    elapsed  = time.time() - t0
-    results  = data.get("results", [])
-    total    = data.get("total", 0)
+    elapsed = time.time() - t0
+    results = data.get("results", [])
+    total   = data.get("total", 0)
 
     st.success(f"Found **{total} matches** in {elapsed:.1f}s")
 
-    # Store results in session state so they persist across reruns
-    st.session_state["results"]           = results
-    st.session_state["requires_spons"]    = requires_sponsorship
+    st.session_state["results"]        = results
+    st.session_state["requires_spons"] = requires_sponsorship
 
 
 # ── Render stored results ──────────────────────────────────────────────────────
@@ -375,16 +386,16 @@ req_spons = st.session_state.get("requires_spons", True)
 
 # ── Summary metrics row ────────────────────────────────────────────────────────
 
-n_high    = sum(1 for j in results if (j.get("sponsorship_signal") or "").lower() in ("positive", "likely_positive") and req_spons)
-n_unknown = sum(1 for j in results if (j.get("sponsorship_signal") or "").lower() == "unknown" and req_spons)
+n_high    = sum(1 for j in results if _is_likely_sponsor(j, req_spons))
 n_neg     = sum(1 for j in results if (j.get("sponsorship_signal") or "").lower() in ("negative", "likely_negative") and req_spons)
+n_unknown = len(results) - n_high - n_neg if req_spons else 0
 avg_score = sum(j.get("final_score", 0) for j in results) / max(len(results), 1)
 
 m1, m2, m3, m4 = st.columns(4)
-m1.metric("Total matches",       len(results))
-m2.metric("Avg final score",     f"{avg_score:.2f}")
+m1.metric("Total matches",   len(results))
+m2.metric("Avg final score", f"{avg_score:.2f}")
 if req_spons:
-    m3.metric("Likely sponsors",  n_high)
+    m3.metric("Likely sponsors",   n_high)
     m4.metric("Unknown / at risk", n_unknown + n_neg)
 else:
     m3.metric("Role matches",     sum(1 for j in results if j.get("role_match")))
@@ -412,28 +423,21 @@ with f_col3:
         label_visibility="collapsed",
     )
 
-# Apply filters
 filtered = list(results)
 
 if filter_signal != "All" and req_spons:
-    sig_map = {
-        "Likely sponsors":  ("positive", "likely_positive"),
-        "Unknown":          ("unknown",),
-        "May not sponsor":  ("negative", "likely_negative"),
-    }
-    keep = sig_map.get(filter_signal, ())
-    filtered = [j for j in filtered if (j.get("sponsorship_signal") or "").lower() in keep]
+    if filter_signal == "Likely sponsors":
+        filtered = [j for j in filtered if _is_likely_sponsor(j, req_spons)]
+    elif filter_signal == "May not sponsor":
+        filtered = [j for j in filtered if (j.get("sponsorship_signal") or "").lower() in ("negative", "likely_negative")]
+    else:
+        filtered = [j for j in filtered if not _is_likely_sponsor(j, req_spons) and (j.get("sponsorship_signal") or "").lower() not in ("negative", "likely_negative")]
 
 if filter_role:
     filtered = [j for j in filtered if j.get("role_match")]
 
-sort_key_map = {
-    "Final score":  "final_score",
-    "Match score":  "match_score",
-    "Recency":      "recency_score",
-}
-skey     = sort_key_map[sort_by]
-filtered = sorted(filtered, key=lambda j: j.get(skey, 0), reverse=True)
+sort_key_map = {"Final score": "final_score", "Match score": "match_score", "Recency": "recency_score"}
+filtered = sorted(filtered, key=lambda j: j.get(sort_key_map[sort_by], 0), reverse=True)
 
 if not filtered:
     st.warning("No results match the current filters.")
@@ -441,25 +445,25 @@ if not filtered:
 
 st.markdown(f"**Showing {len(filtered)} result(s)**")
 
-# ── Job cards ─────────────────────────────────────────────────────────────────
+# ── Job cards ──────────────────────────────────────────────────────────────────
 
 for idx, job in enumerate(filtered, start=1):
-    final    = job.get("final_score",       0.0)
-    match    = job.get("match_score",       0.0)
-    recency  = job.get("recency_score",     0.0)
+    final    = job.get("final_score",        0.0)
+    match    = job.get("match_score",        0.0)
+    recency  = job.get("recency_score",      0.0)
     visa_c   = job.get("visa_confidence")
     signal   = job.get("sponsorship_signal", "n/a")
-    trend    = job.get("sponsorship_trend", "n/a")
+    trend    = job.get("sponsorship_trend",  "n/a")
     perm_cnt = job.get("perm_filings_total", 0)
-    days_ago = job.get("days_since_posted", -1)
-    skills   = job.get("matched_skills",   [])
-    reason   = job.get("reasoning",         "")
-    title    = job.get("title",             "Untitled")
-    company  = job.get("company_slug",      "").replace("-", " ").title()
-    location = job.get("location",          "")
-    apply    = job.get("apply_url",         "#")
-    role_ok  = job.get("role_match",        False)
-    loc_ok   = job.get("location_match",    False)
+    days_ago = job.get("days_since_posted",  -1)
+    skills   = job.get("matched_skills",     [])
+    reason   = job.get("reasoning",          "")
+    title    = job.get("title",              "Untitled")
+    company  = job.get("company_slug",       "").replace("-", " ").title()
+    location = job.get("location",           "")
+    apply    = job.get("apply_url",          "#")
+    role_ok  = job.get("role_match",         False)
+    loc_ok   = job.get("location_match",     False)
 
     badge_html = _visa_badge(signal, visa_c, req_spons)
     em         = _score_color(final)
@@ -467,40 +471,38 @@ for idx, job in enumerate(filtered, start=1):
     posted_str = f"{days_ago}d ago" if days_ago >= 0 else "date unknown"
 
     with st.container():
-        st.markdown(
-            f"""
-            <div class="job-card">
-                <div style="display:flex; justify-content:space-between; align-items:flex-start;">
-                    <div>
-                        <span style="font-size:1.12rem; font-weight:700;">{idx}. {title}</span>
-                        &nbsp;&nbsp;
-                        <span style="color:#555; font-size:0.95rem;">{company}</span>
-                    </div>
-                    <div style="text-align:right; font-size:0.85rem; color:#777;">
-                        {em} <strong>{final:.2f}</strong>&nbsp;final score
-                    </div>
-                </div>
-                <div style="font-size:0.85rem; color:#666; margin:4px 0 8px;">
-                    📍 {location} &nbsp;·&nbsp; 🕐 Posted {posted_str}
-                    {"&nbsp;·&nbsp; ✅ Target role" if role_ok else ""}
-                    {"&nbsp;·&nbsp; 📌 Location match" if loc_ok else ""}
-                </div>
-                <div style="margin-bottom:8px;">
-                    {badge_html}
-                    <span class="badge" style="background:#f0f0f0;color:#333;">
-                        Match {match*100:.0f}%
-                    </span>
-                    <span class="badge" style="background:#f0f0f0;color:#333;">
-                        Recency {recency*100:.0f}%
-                    </span>
-                    {f'<span class="badge" style="background:#f0f0f0;color:#333;">PERM {perm_cnt} filings {trend_ico}</span>' if req_spons and perm_cnt else ""}
-                </div>
-            </div>
-            """,
-            unsafe_allow_html=True,
+        perm_badge = (
+            f'<span class="badge" style="background:#f0f0f0;color:#333;">PERM {perm_cnt} filings {trend_ico}</span>'
+            if req_spons and perm_cnt else ""
         )
+        card_html = textwrap.dedent(f"""
+<a href="{apply}" target="_blank" style="text-decoration:none; color:inherit; display:block;">
+<div class="job-card" style="cursor:pointer; transition:box-shadow 0.15s;" onmouseover="this.style.boxShadow='0 4px 14px rgba(0,0,0,0.12)'" onmouseout="this.style.boxShadow='none'">
+<div style="display:flex; justify-content:space-between; align-items:flex-start; gap:12px;">
+<div style="flex:1; min-width:0;">
+<div style="font-size:1.15rem; font-weight:700; color:#1a1a1a; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;">{company}</div>
+<div style="font-size:0.97rem; color:#333; margin-top:3px;">{title}</div>
+</div>
+<div style="text-align:right; font-size:0.85rem; color:#777; white-space:nowrap; flex-shrink:0;">
+{em} <strong>{final:.2f}</strong> final score
+</div>
+</div>
+<div style="font-size:0.82rem; color:#666; margin:6px 0 10px;">
+📍 {location} &nbsp;·&nbsp; 🕐 Posted {posted_str}
+{"&nbsp;·&nbsp; ✅ Target role" if role_ok else ""}
+{"&nbsp;·&nbsp; 📌 Location match" if loc_ok else ""}
+</div>
+<div>
+{badge_html}
+<span class="badge" style="background:#f0f0f0;color:#333;">Match {match*100:.0f}%</span>
+<span class="badge" style="background:#f0f0f0;color:#333;">Recency {recency*100:.0f}%</span>
+{perm_badge}
+</div>
+</div>
+</a>
+        """).strip()
+        st.markdown(card_html, unsafe_allow_html=True)
 
-        # Expandable detail panel
         with st.expander("Details & Reasoning"):
             col_a, col_b = st.columns(2)
 
@@ -538,3 +540,4 @@ st.caption(
     "VisaMatch · ADSFinal_VisaSystem · "
     "Scores are demo estimates — not legal or immigration advice."
 )
+st.caption("Built by **Arvind Ranganath Raghuraman** & **Akash Arokianathan**")

@@ -1,0 +1,23 @@
+# Python
+.venv/
+__pycache__/
+**/__pycache__/
+*.pyc
+*.pyo
+.python-version
+
+# Dev uploads
+Resumes/
+
+# Docs / tooling
+.git/
+.claude/
+.vscode/
+Diagrams/
+logs/
+*.md
+*.lock
+*.toml
+
+# Secrets — never bake into image
+.env

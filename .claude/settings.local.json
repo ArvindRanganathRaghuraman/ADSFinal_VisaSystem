@@ -8,7 +8,17 @@
       "Bash(/opt/anaconda3/bin/pip install:*)",
       "Bash(/opt/anaconda3/bin/python -m pipeline.ws6_langgraph_pipeline --demo)",
       "Bash(/opt/anaconda3/bin/python -c \"from pipeline.ws6_langgraph_pipeline import build_graph, DEMO_PROFILE; g = build_graph\\(\\).compile\\(\\); print\\('Graph compiled OK'\\); print\\('Nodes:', list\\(g.nodes\\)\\)\")",
-      "Bash(/opt/anaconda3/bin/python -c \"import streamlit, requests; print\\('streamlit OK, requests OK'\\)\")"
+      "Bash(/opt/anaconda3/bin/python -c \"import streamlit, requests; print\\('streamlit OK, requests OK'\\)\")",
+      "Bash(python Diagrams/architecture_diagram.py)",
+      "Bash(pip show *)",
+      "Bash(pip install *)",
+      "Bash(/Users/arvindranganathraghuraman/Desktop/ADSFinal_VisaSystem/.venv/bin/python -m pip install diagrams -q)",
+      "Bash(/Users/arvindranganathraghuraman/Desktop/ADSFinal_VisaSystem/.venv/bin/python Diagrams/architecture_diagram.py)",
+      "Bash(python3 -m pip install --dry-run -r /Users/arvindranganathraghuraman/Desktop/ADSFinal_VisaSystem/requirements.txt)",
+      "Bash(docker system *)",
+      "Bash(gcloud artifacts *)",
+      "Bash(gcloud auth *)",
+      "Bash(docker push *)"
     ]
   }
 }
